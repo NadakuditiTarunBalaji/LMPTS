@@ -364,12 +364,6 @@ pytest --cov
 
 ---
 
-# 📄 License
-
-This project was developed as part of an academic capstone project for educational purposes.
-
----
-
 # 🏆 Project Objectives Achieved
 
 * ✅ Object-Oriented Programming

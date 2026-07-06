@@ -62,6 +62,7 @@ class Learner:
         id: Optional[int] = None,
         completed_courses: Optional[Set[str]] = None,
         current_courses: Optional[Set[str]] = None,
+        external_completed_courses: Optional[Set[str]] = None
     ):
         """
         Create a Learner profile.
@@ -92,6 +93,11 @@ class Learner:
         )
         self.current_courses: Set[str] = (
             set(current_courses) if current_courses is not None else set()
+        )
+        self.external_completed_courses = (
+            set(external_completed_courses)
+            if external_completed_courses is not None
+            else set()
         )
 
     # ── Validation ─────────────────────────────────────────────────────────────
@@ -184,6 +190,29 @@ class Learner:
 
         self.current_courses.discard(course_code)
         self.completed_courses.add(course_code)
+
+    def mark_external_completion(self, course_code: str) -> None:
+           """
+            Mark a prerequisite course as completed outside LMPTS.
+
+             Example:
+               learner.mark_external_completion("PY101")
+            """
+
+           if not course_code or not course_code.strip():
+            raise ValidationError("Course code cannot be empty")
+
+           course_code = course_code.strip()
+
+           if course_code in self.completed_courses:
+            raise EnrollmentError(
+                f"{course_code} already completed inside LMPTS."
+                )
+           if course_code in self.current_courses:
+             raise EnrollmentError(
+                f"{course_code} is currently in progress."
+                )
+           self.external_completed_courses.add(course_code)
 
     # ── Progress Calculations ──────────────────────────────────────────────────
 

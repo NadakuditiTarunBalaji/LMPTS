@@ -45,7 +45,7 @@ UML ER Diagram (Section 10):
         status, score, enrolled_at
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from core.enums import EnrollmentStatus
@@ -90,8 +90,8 @@ class Enrollment:
             status       : Initial status (defaults to ENROLLED)
             score        : Final score (leave None on creation)
             id           : DB primary key (None for new records)
-            enrolled_at  : Defaults to utcnow
-            completed_at : Set when course finishes
+            enrolled_at  : Defaults to now
+timezone.utc            completed_at : Set when course finishes
 
         Example:
             enrollment = Enrollment(learner_id=7, course_code="CS201")
@@ -101,7 +101,7 @@ class Enrollment:
         self.course_code = course_code
         self.status = status
         self.score = score
-        self.enrolled_at = enrolled_at or datetime.utcnow()
+        self.enrolled_at = enrolled_at or datetime.now(timezone.utc)
         self.completed_at = completed_at
 
     # ── Validation ─────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ class Enrollment:
             - learner_id must be set (not None)
             - course_code must be non-empty
             - status must be a valid EnrollmentStatus
-            - score (if present) must be 0–100
+            - score (if present) must be 0-100
 
         Raises:
             ValidationError: With descriptive message.
@@ -167,7 +167,7 @@ class Enrollment:
         Sets status, score, and completed_at timestamp.
 
         Args:
-            score: Final score achieved (must be 0–100).
+            score: Final score achieved (must be 0-100).
 
         Raises:
             ValidationError: If score is out of range.
@@ -194,7 +194,7 @@ class Enrollment:
 
         self.score = score
         self.status = EnrollmentStatus.COMPLETED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     def cancel(self) -> None:
         """
@@ -222,7 +222,7 @@ class Enrollment:
             )
 
         self.status = EnrollmentStatus.CANCELLED
-        self.completed_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
 
     # ── Serialization ──────────────────────────────────────────────────────────
 

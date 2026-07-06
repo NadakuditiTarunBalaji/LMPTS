@@ -19,7 +19,8 @@ UML CompletionStatus enum:
                               → FAILED
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
+
 from typing import Optional
 
 from core.enums import CompletionStatus
@@ -63,7 +64,7 @@ class CourseProgress:
         self.course_code = course_code
         self.percentage = percentage
         self.completion_status = completion_status
-        self.updated_at = updated_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.now(timezone.utc)
 
     def validate(self) -> None:
         """
@@ -121,7 +122,7 @@ class CourseProgress:
             )
 
         self.percentage = new_percentage
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
         if new_percentage == 0.0:
             self.completion_status = CompletionStatus.NOT_STARTED
@@ -137,7 +138,7 @@ class CourseProgress:
         Used when a learner does not meet passing criteria.
         """
         self.completion_status = CompletionStatus.FAILED
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def to_dict(self) -> dict:
         return {

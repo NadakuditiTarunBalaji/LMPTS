@@ -37,7 +37,7 @@ class CourseProgress:
         id                PK
         learner_id        FK → LEARNERS.id
         course_code       FK → COURSES.code
-        percentage        REAL  (0.0 – 100.0)
+        percentage        REAL  (0.0 - 100.0)
         completion_status TEXT  (CompletionStatus enum value)
         updated_at        TEXT  (ISO 8601)
 
@@ -45,7 +45,7 @@ class CourseProgress:
         id                (int)             : Database primary key
         learner_id        (int)             : FK to Learners
         course_code       (str)             : FK to Courses
-        percentage        (float)           : 0.0 – 100.0
+        percentage        (float)           : 0.0 - 100.0
         completion_status (CompletionStatus): Current progress state
         updated_at        (datetime)        : Last update timestamp
     """

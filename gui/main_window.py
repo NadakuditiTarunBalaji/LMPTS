@@ -107,20 +107,25 @@ class MainWindow(tk.Tk):
         role = self._user.role
         if role == UserRole.ADMIN:
             return [
-                ("Dashboard",     self._show_admin_dashboard),
-                ("Courses",       self._show_course_management),
-                ("Prerequisites", self._show_prerequisite_management),
-                ("Learners",      self._show_learner_management),
-                ("Users",         self._show_user_management),
-                ("Analytics",     self._show_analytics),
+                ("Dashboard",          self._show_admin_dashboard),
+                ("Courses",            self._show_course_management),
+                ("Course Approvals",   self._show_course_approvals),   # NEW
+                ("Prerequisites",      self._show_prerequisite_management),
+                ("Learners",           self._show_learner_management),
+                ("Users",              self._show_user_management),
+                ("Prior Learning",     self._show_plr_approval),        # NEW
+                ("Analytics",          self._show_analytics),
             ]
+            # LEARNER — add Prior Learning
+
         elif role == UserRole.LEARNER:
             return [
-                ("Dashboard",       self._show_learner_dashboard),
-                ("My Courses",      self._show_enrollments),
-                ("Learning Path",   self._show_learning_path),
-                ("Progress",        self._show_progress),
-                ("Recommendations", self._show_recommendations),
+                ("Dashboard",          self._show_learner_dashboard),
+                ("My Courses",         self._show_enrollments),
+                ("Learning Path",      self._show_learning_path),
+                ("Progress",           self._show_progress),
+                ("Prior Learning",     self._show_prior_learning),      # NEW
+                ("Recommendations",    self._show_recommendations),
             ]
         elif role == UserRole.ANALYST:
             return [
@@ -131,8 +136,11 @@ class MainWindow(tk.Tk):
             ]
         elif role == UserRole.INSTRUCTOR:
             return [
-                ("Dashboard",        self._show_instructor_dashboard),
-                ("Monitor Learners", self._show_learner_monitor),
+                ("Dashboard",          self._show_instructor_dashboard),
+                ("My Courses",         self._show_instructor_courses),
+                ("Monitor Learners",   self._show_learner_monitor),
+                ("Review Prior Learning", self._show_plr_review),
+                ("Course Reports",     self._show_course_reports),
             ]
         return []
 
@@ -155,6 +163,28 @@ class MainWindow(tk.Tk):
             self._show_instructor_dashboard()
 
     # ── Admin screens ──────────────────────────────────────────────────────────
+    # Admin new methods
+    def _show_course_approvals(self):
+        self._clear_content()
+        from gui.admin.course_approvals import CourseApprovalScreen
+        CourseApprovalScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
+
+    def _show_plr_approval(self):
+        self._clear_content()
+        from gui.admin.plr_approval import PLRApprovalScreen
+        PLRApprovalScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
+
+    # Learner new method
+    def _show_prior_learning(self):
+        self._clear_content()
+        from gui.learner.prior_learning import PriorLearningScreen
+        PriorLearningScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
 
     def _show_admin_dashboard(self):
         self._clear_content()
@@ -267,6 +297,7 @@ class MainWindow(tk.Tk):
 
     # ── Instructor screens ─────────────────────────────────────────────────────
 
+    # Update existing _show_instructor_dashboard
     def _show_instructor_dashboard(self):
         self._clear_content()
         from gui.instructor.dashboard import InstructorDashboard
@@ -274,11 +305,12 @@ class MainWindow(tk.Tk):
             self._content_frame, self._user, self._services
         ).pack(fill="both", expand=True)
 
+    # Update existing _show_learner_monitor
     def _show_learner_monitor(self):
         self._clear_content()
         from gui.instructor.learner_monitor import LearnerMonitorScreen
         LearnerMonitorScreen(
-            self._content_frame, self._services
+            self._content_frame, self._services, self._user
         ).pack(fill="both", expand=True)
 
     # ── Session ────────────────────────────────────────────────────────────────
@@ -308,3 +340,24 @@ class MainWindow(tk.Tk):
         except Exception:
             pass
         self.destroy()
+    def _show_instructor_courses(self):
+        self._clear_content()
+        from gui.instructor.course_manager import InstructorCourseManager
+        InstructorCourseManager(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
+
+    def _show_plr_review(self):
+        self._clear_content()
+        from gui.instructor.plr_review import PLRReviewScreen
+        PLRReviewScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
+
+    def _show_course_reports(self):
+        self._clear_content()
+        from gui.instructor.learner_monitor import LearnerMonitorScreen
+        LearnerMonitorScreen(
+            self._content_frame, self._services, self._user
+        ).pack(fill="both", expand=True)
+

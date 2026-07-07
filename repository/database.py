@@ -30,7 +30,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -124,6 +124,60 @@ CREATE TABLE IF NOT EXISTS course_progress (
         REFERENCES courses(code) ON DELETE CASCADE
 )
 """
+# Add these SQL constants to database.py
+
+SQL_CREATE_PRIOR_LEARNING_REQUESTS = """
+CREATE TABLE IF NOT EXISTS prior_learning_requests (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    learner_id                  INTEGER NOT NULL,
+    course_code                 TEXT    NOT NULL,
+    pathway                     TEXT    NOT NULL,
+    evidence_description        TEXT    NOT NULL,
+    external_platform           TEXT    DEFAULT '',
+    external_score              REAL,
+    status                      TEXT    NOT NULL DEFAULT 'PENDING',
+    instructor_recommendation   TEXT,
+    instructor_note             TEXT,
+    instructor_id               INTEGER,
+    admin_note                  TEXT,
+    admin_id                    INTEGER,
+    submitted_at                TEXT    NOT NULL,
+    reviewed_by_instructor_at   TEXT,
+    decided_by_admin_at         TEXT,
+    FOREIGN KEY (learner_id)
+        REFERENCES learners(id) ON DELETE CASCADE,
+    FOREIGN KEY (course_code)
+        REFERENCES courses(code) ON DELETE CASCADE
+)
+"""
+
+SQL_CREATE_COURSE_SUBMISSIONS = """
+CREATE TABLE IF NOT EXISTS course_submissions (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_code      TEXT    NOT NULL,
+    instructor_id    INTEGER NOT NULL,
+    status           TEXT    NOT NULL DEFAULT 'PENDING',
+    instructor_note  TEXT    DEFAULT '',
+    admin_note       TEXT    DEFAULT '',
+    submitted_at     TEXT    NOT NULL,
+    decided_at       TEXT,
+    FOREIGN KEY (course_code)
+        REFERENCES courses(code) ON DELETE CASCADE
+)
+"""
+
+SQL_CREATE_NOTIFICATIONS = """
+CREATE TABLE IF NOT EXISTS notifications (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL,
+    message           TEXT    NOT NULL,
+    is_read           INTEGER NOT NULL DEFAULT 0,
+    notification_type TEXT    NOT NULL DEFAULT 'INFO',
+    created_at        TEXT    NOT NULL,
+    FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE CASCADE
+)
+"""
 
 ALL_TABLE_SQLS = [
     SQL_CREATE_SCHEMA_VERSION,
@@ -133,6 +187,9 @@ ALL_TABLE_SQLS = [
     SQL_CREATE_PREREQUISITES,
     SQL_CREATE_ENROLLMENTS,
     SQL_CREATE_COURSE_PROGRESS,
+    SQL_CREATE_PRIOR_LEARNING_REQUESTS,   # NEW
+    SQL_CREATE_COURSE_SUBMISSIONS,         # NEW
+    SQL_CREATE_NOTIFICATIONS,              # NEW
 ]
 
 ALL_TABLE_NAMES = [
@@ -302,6 +359,8 @@ class Database:
         """
         MIGRATIONS = {
             1: self._migrate_v1,
+            2: self._migrate_v2,   # ADD THIS
+
         }
 
         current_version = self._get_current_version()
@@ -350,6 +409,36 @@ class Database:
         for sql in indexes:
             conn.execute(sql)
         logger.debug("Migration v1: indexes created")
+    def _migrate_v2(self, conn: sqlite3.Connection) -> None:
+        """
+        Migration v2: Add user activation, new tables, indexes.
+        """
+        # Add is_active column to users if not exists
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1"
+            )
+        except Exception:
+            pass  # Column already exists
+
+        # Indexes for new tables
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_plr_learner "
+            "ON prior_learning_requests(learner_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_plr_status "
+            "ON prior_learning_requests(status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_submissions_status "
+            "ON course_submissions(status)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_notifications_user "
+            "ON notifications(user_id)"
+        )
+        logger.debug("Migration v2: user activation + new tables")
 
     def get_schema_version(self) -> int:
         """

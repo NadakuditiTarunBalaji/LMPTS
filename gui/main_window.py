@@ -105,16 +105,18 @@ class MainWindow(tk.Tk):
 
     def _get_nav_items(self) -> list:
         role = self._user.role
+        # In _get_nav_items() for ADMIN role — update to include pending:
         if role == UserRole.ADMIN:
             return [
-                ("Dashboard",          self._show_admin_dashboard),
-                ("Courses",            self._show_course_management),
-                ("Course Approvals",   self._show_course_approvals),   # NEW
-                ("Prerequisites",      self._show_prerequisite_management),
-                ("Learners",           self._show_learner_management),
-                ("Users",              self._show_user_management),
-                ("Prior Learning",     self._show_plr_approval),        # NEW
-                ("Analytics",          self._show_analytics),
+                ("Dashboard",              self._show_admin_dashboard),
+                ("⏳ Pending Registrations", self._show_pending_registrations),  # NEW
+                ("Courses",                self._show_course_management),
+                ("Course Approvals",       self._show_course_approvals),
+                ("Prerequisites",          self._show_prerequisite_management),
+                ("Learners",               self._show_learner_management),
+                ("Users",                  self._show_user_management),
+                ("Prior Learning",         self._show_plr_approval),
+                ("Analytics",              self._show_analytics),
             ]
             # LEARNER — add Prior Learning
 
@@ -143,6 +145,13 @@ class MainWindow(tk.Tk):
                 ("Course Reports",     self._show_course_reports),
             ]
         return []
+    # Add this method to MainWindow:
+    def _show_pending_registrations(self):
+        self._clear_content()
+        from gui.admin.pending_registrations import PendingRegistrationsScreen
+        PendingRegistrationsScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
 
     # ── Screen routing ─────────────────────────────────────────────────────────
 

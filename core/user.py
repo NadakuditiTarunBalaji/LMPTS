@@ -35,7 +35,7 @@ UML Relationship:
 from datetime import datetime,timezone
 from typing import Optional
 
-from core.enums import UserRole
+from core.enums import UserRole,AccountStatus
 from core.exceptions import ValidationError
 
 
@@ -43,51 +43,42 @@ class User:
     """
     One account in the LMPTS system.
 
-    UML Actors → UserRole mapping:
-        Administrator → UserRole.ADMIN
-        Learner       → UserRole.LEARNER
-        Instructor    → UserRole.INSTRUCTOR
-        Analyst       → UserRole.ANALYST
-
     Attributes:
-        id            (int)      : Database primary key (None before first save)
-        username      (str)      : Login name, must be unique and non-empty
-        password_hash (str)      : bcrypt hash — plain text is NEVER stored
-        role          (UserRole) : Determines permissions
-        created_at    (datetime) : Account creation timestamp
+        id               (int)         : Database primary key
+        username         (str)         : Login name
+        password_hash    (str)         : bcrypt hash
+        role             (UserRole)    : Permissions level
+        created_at       (datetime)    : Account creation timestamp
+        is_active        (bool)        : Whether account can log in
+        account_status   (str)         : ACTIVE / PENDING / REJECTED
+        rejection_reason (str)         : Reason if rejected
+        full_name        (str)         : Learner's full name
+        email            (str)         : Learner's email address
     """
 
     def __init__(
         self,
-        username: str,
-        password_hash: str,
-        role: UserRole,
-        id: Optional[int] = None,
-        created_at: Optional[datetime] = None,
+        username:         str,
+        password_hash:    str,
+        role:             UserRole,
+        id:               Optional[int]       = None,
+        created_at:       Optional[datetime]  = None,
+        is_active:        bool                = True,
+        account_status:   AccountStatus       = AccountStatus.ACTIVE,
+        rejection_reason: str                 = "",
+        full_name:        str                 = "",
+        email:            str                 = "",
     ):
-        """
-        Create a User object.
-
-        Args:
-            username      : Login name (must be non-empty after stripping)
-            password_hash : Pre-hashed password from PasswordManager.hash_password()
-            role          : UserRole enum value
-            id            : Database primary key (None for unsaved users)
-            created_at    : Timestamp; defaults to now timezone.utcif not provided
-
-        Example:
-            user = User(
-                username="admin",
-                password_hash="$2b$12$...",
-                role=UserRole.ADMIN,
-            )
-        """
-        self.id = id
-        self.username = username
-        self.password_hash = password_hash
-        self.role = role
-        self.created_at = created_at or datetime.now(timezone.utc)
-
+        self.id               = id
+        self.username         = username
+        self.password_hash    = password_hash
+        self.role             = role
+        self.created_at       = created_at or datetime.now(timezone.utc)
+        self.is_active        = is_active
+        self.account_status   = account_status
+        self.rejection_reason = rejection_reason
+        self.full_name        = full_name
+        self.email            = email
     # ── Validation ─────────────────────────────────────────────────────────────
 
     def validate(self) -> None:
@@ -117,6 +108,11 @@ class User:
                 f"Must be one of: {[r.value for r in UserRole]}"
             )
 
+        if not isinstance(self.account_status, AccountStatus):
+            raise ValidationError(
+                f"Invalid account_status '{self.account_status}'. "
+                f"Must be one of: {[s.value for s in AccountStatus]}"
+            )
     # ── Serialization ──────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -136,12 +132,21 @@ class User:
             → {"id": 1, "username": "admin", "role": "ADMIN",
                "created_at": "2024-01-15T10:30:00"}
         """
+        """
+        Convert to dictionary — excludes password_hash for security.
+        """
         return {
-            "id": self.id,
-            "username": self.username,
-            "role": self.role.value,
-            "created_at": self.created_at.isoformat(),
+            "id":               self.id,
+            "username":         self.username,
+            "role":             self.role.value,
+            "created_at":       self.created_at.isoformat(),
+            "is_active":        1 if self.is_active else 0,
+            "account_status":   self.account_status.value,  # ← .value
+            "rejection_reason": self.rejection_reason,
+            "full_name":        self.full_name,
+            "email":            self.email,
         }
+
 
     def to_dict_with_hash(self) -> dict:
         """
@@ -152,34 +157,17 @@ class User:
         Returns:
             dict: {id, username, password_hash, role, created_at}
         """
+        """Full dictionary including password_hash for DB persistence."""
         data = self.to_dict()
         data["password_hash"] = self.password_hash
         return data
-
     @classmethod
     def from_dict(cls, row: dict) -> "User":
         """
         Reconstruct a User from a database row dictionary.
-
-        UML: Factory method used by UserRepository implementations.
-
-        Args:
-            row: Dict with keys matching USERS table columns.
-                 Required: username, password_hash, role
-                 Optional: id, created_at
-
-        Returns:
-            User: Fully populated User object.
-
-        Raises:
-            ValidationError: If role value is unrecognised.
-
-        Example:
-            row = {"id": 1, "username": "admin",
-                   "password_hash": "$2b$12$...", "role": "ADMIN",
-                   "created_at": "2024-01-15T10:30:00"}
-            user = User.from_dict(row)
         """
+        from core.enums import AccountStatus
+
         try:
             role = UserRole(row["role"])
         except ValueError:
@@ -187,28 +175,43 @@ class User:
                 f"Unknown role value '{row['role']}' in database row"
             )
 
+        # Parse account_status enum from stored string
+        status_str = row.get("account_status") or "ACTIVE"
+        try:
+            account_status = AccountStatus(status_str)
+        except ValueError:
+            account_status = AccountStatus.ACTIVE
+
         created_at = row.get("created_at")
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at)
 
-        return cls(
-            id=row.get("id"),
-            username=row["username"],
-            password_hash=row["password_hash"],
-            role=role,
-            created_at=created_at,
-        )
+        # is_active: handle int (0/1) and bool
+        is_active_raw = row.get("is_active", 1)
+        is_active = bool(is_active_raw) if is_active_raw is not None else True
 
+        return cls(
+            id               = row.get("id"),
+            username         = row["username"],
+            password_hash    = row["password_hash"],
+            role             = role,
+            created_at       = created_at,
+            is_active        = is_active,
+            account_status   = account_status,
+            rejection_reason = row.get("rejection_reason") or "",
+            full_name        = row.get("full_name") or "",
+            email            = row.get("email") or "",
+        )
     # ── Dunder Methods ─────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:
         return (
             f"User(id={self.id}, username='{self.username}', "
-            f"role={self.role.value})"
+            f"role={self.role.value}, "
+            f"status={self.account_status.value})"
         )
 
     def __eq__(self, other: object) -> bool:
-        """Two users are equal if they share the same database ID."""
         if not isinstance(other, User):
             return NotImplemented
         return self.id == other.id

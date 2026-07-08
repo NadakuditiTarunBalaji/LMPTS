@@ -1,49 +1,21 @@
 """
 auth_service.py
 ---------------
-Business logic layer for all authentication operations.
+Authentication business logic.
 
-UML Class Diagram:
-    ┌──────────────────────┐
-    │     AuthService      │
-    ├──────────────────────┤
-    │ register()           │
-    │ login()              │
-    │ logout()             │
-    │ verify_user()        │
-    │ change_password()    │
-    └──────────────────────┘
-
-UML Dependencies (dashed arrows):
-    AuthService ───> PasswordManager
-    AuthService ───> SessionManager
-    AuthService ───> UserRepository
-
-UML Sequence Diagram (Section 5) — Login Flow:
-    1. User enters credentials
-    2. GUI calls AuthService.login()
-    3. AuthService calls UserRepository.find_by_username()
-    4. Repository queries SQLite
-    5. SQLite returns user row
-    6. PasswordManager.verify_password() checks bcrypt hash
-    7. SessionManager.login(user) creates session
-    8. Dashboard opens
-
-UML Activity Diagram (Section 8) — Authentication:
-    Start → Enter Credentials → Find User
-    → [not found] → Invalid Login → End
-    → [found] → Verify Password
-    → [wrong] → Authentication Error → End
-    → [correct] → Create Session → Open Dashboard → End
-
-Default Users (created during initialization):
-    admin   / admin123   → ADMIN
-    learner / learner123 → LEARNER
-    analyst / analyst123 → ANALYST
+Handles:
+    - User registration (admin-created + learner self-registration)
+    - Login with account status checks (PENDING/REJECTED/INACTIVE)
+    - Session management
+    - Password changes
+    - Default account creation
 """
 
+import logging
+from typing import Optional
+
 from core.user import User
-from core.enums import UserRole
+from core.enums import UserRole, AccountStatus
 from core.exceptions import (
     ValidationError,
     AuthenticationError,
@@ -53,56 +25,85 @@ from auth.password_manager import PasswordManager
 from auth.user_repository import UserRepository
 from auth.session_manager import SessionManager
 
+logger = logging.getLogger(__name__)
+
 
 class AuthService:
     """
-    Orchestrates authentication and user management.
-
-    UML Component Diagram position:
-        GUI → AuthService → (PasswordManager, SessionManager, UserRepository)
-
-    Attributes:
-        _repo    (UserRepository) : Data access layer (injected)
-        _session (SessionManager) : Session tracker (singleton)
-        _pm      (PasswordManager): Password operations
+    Business logic for authentication and user account management.
     """
 
     def __init__(self, user_repository: UserRepository):
-        """
-        Initialize with a concrete UserRepository.
-
-        Dependency Injection: repository is passed in, not created here.
-        This follows the UML dependency arrows exactly.
-
-        Args:
-            user_repository: Any object implementing UserRepository interface.
-        """
-        self._repo = user_repository
+        self._repo    = user_repository
         self._session = SessionManager()
-        self._pm = PasswordManager()
+        self._pm      = PasswordManager()
 
-    # ── Registration ───────────────────────────────────────────────────────────
+    # ── Login ──────────────────────────────────────────────────────────────────
+
+    def login(self, username: str, plain_password: str) -> User:
+        """
+        Authenticate a user and start a session.
+
+        Rejects login if account is PENDING, REJECTED, or INACTIVE.
+
+        Raises:
+            AuthenticationError: Wrong credentials or account inactive.
+        """
+        user = self._repo.find_by_username(username)
+
+        if user is None:
+            raise AuthenticationError("Invalid username or password")
+
+        # Check account status BEFORE password verification
+        if user.account_status == AccountStatus.PENDING:
+            raise AuthenticationError(
+                "PENDING: Your account is pending admin approval. "
+                "Please wait for the administrator to review "
+                "your registration."
+            )
+
+        if user.account_status == AccountStatus.REJECTED:
+            reason = user.rejection_reason or "No reason provided"
+            raise AuthenticationError(
+                f"REJECTED: Your registration was rejected. "
+                f"Reason: {reason}"
+            )
+
+        if user.account_status == AccountStatus.INACTIVE:
+            raise AuthenticationError(
+                "INACTIVE: Your account has been deactivated. "
+                "Please contact the administrator."
+            )
+
+        if not user.is_active:
+            raise AuthenticationError(
+                "Your account is not active. "
+                "Please contact the administrator."
+            )
+
+        if not self._pm.verify_password(plain_password, user.password_hash):
+            raise AuthenticationError("Invalid username or password")
+
+        self._session.login(user)
+        logger.info(f"Login success: {username}")
+        return user
+
+    # ── Logout ─────────────────────────────────────────────────────────────────
+
+    def logout(self) -> None:
+        """End the current session."""
+        self._session.logout()
+
+    # ── Admin Registration (creates ACTIVE users) ─────────────────────────────
 
     def register(
         self,
-        username: str,
+        username:       str,
         plain_password: str,
-        role: UserRole = UserRole.LEARNER,
+        role:           UserRole = UserRole.LEARNER,
     ) -> User:
         """
-        Register a new user account.
-
-        UML Activity flow:
-            Validate username → Validate password → Hash password
-            → Create User → Save to repository → Return User
-
-        Args:
-            username       : Desired login name (must be unique).
-            plain_password : Plain-text password (min 8 chars).
-            role           : User role (defaults to LEARNER).
-
-        Returns:
-            User: Newly created User with id assigned.
+        Register a new user (used by admin — creates ACTIVE account).
 
         Raises:
             ValidationError: If validation fails or username taken.
@@ -125,77 +126,91 @@ class AuthService:
         password_hash = self._pm.hash_password(plain_password)
 
         user = User(
-            username=username,
-            password_hash=password_hash,
-            role=role,
+            username         = username,
+            password_hash    = password_hash,
+            role             = role,
+            is_active        = True,
+            account_status   = AccountStatus.ACTIVE,
+        )
+        user.validate()
+        saved_user = self._repo.create_user(user)
+        logger.info(f"Admin created user: {username} ({role.value})")
+        return saved_user
+
+    # ── Learner Self-Registration (creates PENDING accounts) ──────────────────
+
+    def register_learner(
+        self,
+        username:  str,
+        password:  str,
+        full_name: str,
+        email:     str,
+    ) -> User:
+        """
+        Self-registration for learners.
+
+        Creates account with PENDING status.
+        Admin must approve before the learner can log in.
+
+        Raises:
+            ValidationError: If validation fails.
+        """
+        if not username or not username.strip():
+            raise ValidationError("Username cannot be empty")
+
+        username = username.strip()
+
+        if self._repo.find_by_username(username) is not None:
+            raise ValidationError(
+                f"Username '{username}' is already taken. "
+                f"Please choose a different username."
+            )
+
+        if not password or len(password) < 8:
+            raise ValidationError(
+                "Password must be at least 8 characters long"
+            )
+
+        if not full_name or not full_name.strip():
+            raise ValidationError("Full name cannot be empty")
+
+        if not email or not email.strip():
+            raise ValidationError("Email address cannot be empty")
+
+        if "@" not in email:
+            raise ValidationError("Please enter a valid email address")
+
+        password_hash = self._pm.hash_password(password)
+
+        user = User(
+            username         = username,
+            password_hash    = password_hash,
+            role             = UserRole.LEARNER,
+            is_active        = False,
+            account_status   = AccountStatus.PENDING,
+            rejection_reason = "",
+            full_name        = full_name.strip(),
+            email            = email.strip(),
         )
         user.validate()
         saved_user = self._repo.create_user(user)
 
+        logger.info(
+            f"New learner registration: {username} "
+            f"(id={saved_user.id}) — PENDING approval"
+        )
         return saved_user
-
-    # ── Login ──────────────────────────────────────────────────────────────────
-
-    def login(self, username: str, plain_password: str) -> User:
-        """
-        Authenticate a user and start a session.
-
-        UML Sequence Diagram (Section 5):
-            Steps 2–8 are implemented here.
-
-        UML Activity Diagram (Section 8):
-            Find User → Verify Password → Create Session
-
-        Args:
-            username       : Login name.
-            plain_password : Password to verify.
-
-        Returns:
-            User: The authenticated user object.
-
-        Raises:
-            AuthenticationError: If username not found or password wrong.
-                                 (same message prevents enumeration)
-        """
-        user = self._repo.find_by_username(username)
-        if user is None:
-            raise AuthenticationError("Invalid username or password")
-
-        if not self._pm.verify_password(plain_password, user.password_hash):
-            raise AuthenticationError("Invalid username or password")
-
-        self._session.login(user)
-        return user
-
-    # ── Logout ─────────────────────────────────────────────────────────────────
-
-    def logout(self) -> None:
-        """
-        End the current session.
-
-        UML Use Case: "Logout" (available to all actors)
-        """
-        self._session.logout()
 
     # ── Password Change ────────────────────────────────────────────────────────
 
     def change_password(
         self,
-        user_id: int,
+        user_id:      int,
         old_password: str,
         new_password: str,
     ) -> None:
         """
         Change a user's password after verifying the old one.
-
-        Flow:
-            Get user → Verify old password → Validate new password
-            → Hash new password → Persist
-
-        Args:
-            user_id      : ID of the user.
-            old_password : Must match current hash.
-            new_password : New plain-text password (min 8 chars).
 
         Raises:
             LearnerNotFoundError: If user_id not found.
@@ -204,7 +219,7 @@ class AuthService:
         """
         user = self._repo.get_user(user_id)
         if user is None:
-            raise LearnerNotFoundError(f"User with ID {user_id} not found")
+            raise LearnerNotFoundError(f"User {user_id} not found")
 
         if not self._pm.verify_password(old_password, user.password_hash):
             raise AuthenticationError("Current password is incorrect")
@@ -216,46 +231,59 @@ class AuthService:
 
         new_hash = self._pm.hash_password(new_password)
         self._repo.update_password(user_id, new_hash)
+        logger.info(f"Password changed for user id={user_id}")
 
     # ── Verification ───────────────────────────────────────────────────────────
 
     def verify_user(self) -> bool:
-        """
-        Check whether a user is currently authenticated.
-
-        Returns:
-            True if session active, False otherwise.
-        """
+        """Return True if a user is currently logged in."""
         return self._session.is_authenticated()
 
-    def current_user(self) -> User | None:
-        """
-        Get the currently logged-in user.
-
-        Returns:
-            User if logged in, None otherwise.
-        """
+    def current_user(self) -> Optional[User]:
+        """Return the currently logged-in user or None."""
         return self._session.current_user()
 
     # ── Default Users ──────────────────────────────────────────────────────────
 
     def create_default_users(self) -> None:
         """
-        Seed the system with required default accounts.
+        Create the default system accounts if they do not exist.
 
-        UML Default Users table:
-            admin   / admin123   → ADMIN
-            learner / learner123 → LEARNER
-            analyst / analyst123 → ANALYST
+        All default accounts are created ACTIVE:
+            admin      / admin123      → ADMIN
+            learner    / learner123    → LEARNER
+            analyst    / analyst123    → ANALYST
+            instructor / instructor123 → INSTRUCTOR
 
-        Idempotent: safe to call multiple times.
+        Safe to call multiple times (idempotent).
         """
         defaults = [
-            ("admin", "admin123", UserRole.ADMIN),
-            ("learner", "learner123", UserRole.LEARNER),
-            ("analyst", "analyst123", UserRole.ANALYST),
+            ("admin",      "admin123",      UserRole.ADMIN),
+            ("learner",    "learner123",    UserRole.LEARNER),
+            ("analyst",    "analyst123",    UserRole.ANALYST),
+            ("instructor", "instructor123", UserRole.INSTRUCTOR),
         ]
 
         for username, password, role in defaults:
-            if self._repo.find_by_username(username) is None:
-                self.register(username, password, role)
+            if self._repo.find_by_username(username) is not None:
+                continue
+
+            try:
+                password_hash = self._pm.hash_password(password)
+                user = User(
+                    username         = username,
+                    password_hash    = password_hash,
+                    role             = role,
+                    is_active        = True,
+                    account_status   = AccountStatus.ACTIVE,
+                    rejection_reason = "",
+                    full_name        = f"Default {role.value.title()}",
+                    email            = f"{username}@lmpts.edu",
+                )
+                user.validate()
+                self._repo.create_user(user)
+                logger.info(f"Created default user: {username}")
+            except Exception as e:
+                logger.warning(
+                    f"Could not create default user '{username}': {e}"
+                )

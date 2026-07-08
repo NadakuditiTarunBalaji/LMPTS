@@ -64,21 +64,42 @@ class MainWindow(tk.Tk):
             bg=HEADER_BG, fg="#a8c8e8",
         ).pack(side="left", pady=10)
 
+        # In _build_header() — replace the user_frame section with this:
+
         user_frame = tk.Frame(header, bg=HEADER_BG)
         user_frame.pack(side="right", padx=20, pady=5)
 
-        tk.Label(
+        # Make the whole user_frame clickable
+        user_frame.bind("<Button-1>", lambda e: self._show_profile())
+        user_frame.config(cursor="hand2")
+
+        username_label = tk.Label(
             user_frame,
             text=f"👤  {self._user.username}",
             font=("Segoe UI", 10, "bold"),
             bg=HEADER_BG, fg=HEADER_FG,
-        ).pack(anchor="e")
+            cursor="hand2",
+        )
+        username_label.pack(anchor="e")
+        username_label.bind("<Button-1>", lambda e: self._show_profile())
 
-        tk.Label(
+        role_label = tk.Label(
             user_frame,
             text=self._user.role.value,
             font=("Segoe UI", 8),
             bg=HEADER_BG, fg="#a8c8e8",
+            cursor="hand2",
+        )
+        role_label.pack(anchor="e")
+        role_label.bind("<Button-1>", lambda e: self._show_profile())
+
+        # Small hint text
+        tk.Label(
+            user_frame,
+            text="(click to view profile)",
+            font=("Segoe UI", 7, "italic"),
+            bg=HEADER_BG, fg="#7ba8d1",
+            cursor="hand2",
         ).pack(anchor="e")
 
     # ── Body ───────────────────────────────────────────────────────────────────
@@ -109,7 +130,7 @@ class MainWindow(tk.Tk):
         if role == UserRole.ADMIN:
             return [
                 ("Dashboard",              self._show_admin_dashboard),
-                ("⏳ Pending Registrations", self._show_pending_registrations),  # NEW
+                ("⏳ Pending Registrations", self._show_pending_registrations),
                 ("Courses",                self._show_course_management),
                 ("Course Approvals",       self._show_course_approvals),
                 ("Prerequisites",          self._show_prerequisite_management),
@@ -117,32 +138,36 @@ class MainWindow(tk.Tk):
                 ("Users",                  self._show_user_management),
                 ("Prior Learning",         self._show_plr_approval),
                 ("Analytics",              self._show_analytics),
+                ("My Profile",             self._show_profile),   # NEW
             ]
-            # LEARNER — add Prior Learning
 
         elif role == UserRole.LEARNER:
             return [
-                ("Dashboard",          self._show_learner_dashboard),
-                ("My Courses",         self._show_enrollments),
-                ("Learning Path",      self._show_learning_path),
-                ("Progress",           self._show_progress),
-                ("Prior Learning",     self._show_prior_learning),      # NEW
-                ("Recommendations",    self._show_recommendations),
+                ("Dashboard",       self._show_learner_dashboard),
+                ("My Courses",      self._show_enrollments),
+                ("Learning Path",   self._show_learning_path),
+                ("Progress",        self._show_progress),
+                ("Prior Learning",  self._show_prior_learning),
+                ("Recommendations", self._show_recommendations),
+                ("My Profile",      self._show_profile),          # NEW
             ]
+
         elif role == UserRole.ANALYST:
             return [
                 ("Dashboard",        self._show_analyst_dashboard),
                 ("Reports",          self._show_analytics_reports),
                 ("Completion Stats", self._show_completion_stats),
                 ("Bottlenecks",      self._show_bottlenecks),
+                ("My Profile",       self._show_profile),          # NEW
             ]
+
         elif role == UserRole.INSTRUCTOR:
             return [
-                ("Dashboard",          self._show_instructor_dashboard),
-                ("My Courses",         self._show_instructor_courses),
-                ("Monitor Learners",   self._show_learner_monitor),
-                ("Review Prior Learning", self._show_plr_review),
-                ("Course Reports",     self._show_course_reports),
+                ("Dashboard",             self._show_instructor_dashboard),
+                ("My Courses",            self._show_instructor_courses),
+                ("Monitor Learners",      self._show_learner_monitor),
+                ("Prior Learning Review", self._show_plr_review),
+                ("My Profile",            self._show_profile),     # NEW
             ]
         return []
     # Add this method to MainWindow:
@@ -370,3 +395,35 @@ class MainWindow(tk.Tk):
             self._content_frame, self._services, self._user
         ).pack(fill="both", expand=True)
 
+    def _show_profile(self):
+        """Open the profile management screen."""
+        self._clear_content()
+        from gui.profile.profile_screen import ProfileScreen
+        ProfileScreen(
+            self._content_frame,
+            user               = self._user,
+            services           = self._services,
+            on_password_change = self._force_logout,
+        ).pack(fill="both", expand=True)
+
+    def _force_logout(self):
+        """Force logout after password change."""
+        try:
+            auth = self._services.get("auth_service")
+            if auth:
+                auth.logout()
+        except Exception:
+            pass
+
+        self.destroy()
+
+        # Reopen login window
+        from gui.login_window import LoginWindow
+        login = LoginWindow(
+            services         = self._services,
+            on_login_success = lambda user, svc: (
+                __import__("gui.main_window", fromlist=["MainWindow"])
+                .MainWindow(user, svc).mainloop()
+            )
+        )
+        login.mainloop()

@@ -37,6 +37,8 @@ def create_services(database) -> dict:
     from services.recommendation_service import RecommendationService
     from services.prior_learning_service import PriorLearningService
     from services.account_service import AccountService
+    from services.profile_service import ProfileService
+
 
     user_repo       = SQLiteUserRepository(database)
     learner_repo    = SQLiteLearnerRepository(database)
@@ -49,6 +51,11 @@ def create_services(database) -> dict:
     graph = CourseGraph()
 
     course_service = CourseService(course_repo, graph)
+    profile_service = ProfileService(
+    user_repo         = user_repo,
+    learner_repo      = learner_repo,
+    notification_repo = notif_repo,
+    )
 
     enrollment_service = EnrollmentService(
         enrollment_repo=enrollment_repo,
@@ -122,6 +129,8 @@ def create_services(database) -> dict:
         "plr_repo"               : plr_repo,
         "notification_repo"      : notif_repo,
         "database"               : database,
+        "profile_service": profile_service,
+
     }
 
 

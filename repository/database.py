@@ -30,7 +30,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -49,16 +49,19 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 SQL_CREATE_USERS = """
 CREATE TABLE IF NOT EXISTS users (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    username          TEXT    NOT NULL UNIQUE,
-    password_hash     TEXT    NOT NULL,
-    role              TEXT    NOT NULL,
-    created_at        TEXT    NOT NULL,
-    is_active         INTEGER NOT NULL DEFAULT 1,
-    account_status    TEXT    NOT NULL DEFAULT 'ACTIVE',
-    rejection_reason  TEXT    DEFAULT '',
-    full_name         TEXT    DEFAULT '',
-    email             TEXT    DEFAULT ''
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    username              TEXT    NOT NULL UNIQUE,
+    password_hash         TEXT    NOT NULL,
+    role                  TEXT    NOT NULL,
+    created_at            TEXT    NOT NULL,
+    is_active             INTEGER NOT NULL DEFAULT 1,
+    account_status        TEXT    NOT NULL DEFAULT 'ACTIVE',
+    rejection_reason      TEXT    DEFAULT '',
+    full_name             TEXT    DEFAULT '',
+    email                 TEXT    DEFAULT '',
+    bio                   TEXT    DEFAULT '',
+    preferred_difficulty  TEXT    DEFAULT 'BEGINNER',
+    profile_updated_at    TEXT    DEFAULT ''
 )
 """
 
@@ -368,6 +371,8 @@ class Database:
             1: self._migrate_v1,
             2: self._migrate_v2,   # ADD THIS
             3: self._migrate_v3,  
+            4: self._migrate_v4,   # ADD THIS
+
 
         }
 
@@ -485,7 +490,28 @@ class Database:
         )
         logger.debug("Migration v3: account activation columns added")
 
-        
+    def _migrate_v4(self, conn: sqlite3.Connection) -> None:
+        """
+        Migration v4: Add profile management columns.
+
+        Columns added:
+            bio                  → about-me description (all roles)
+            preferred_difficulty → learner's difficulty preference
+            profile_updated_at   → last profile modification timestamp
+        """
+        alterations = [
+            "ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN preferred_difficulty "
+            "TEXT DEFAULT 'BEGINNER'",
+            "ALTER TABLE users ADD COLUMN profile_updated_at "
+            "TEXT DEFAULT ''",
+        ]
+        for sql in alterations:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # Column already exists
+        logger.debug("Migration v4: profile columns added")
     def get_schema_version(self) -> int:
         """
         Return the current schema version number.

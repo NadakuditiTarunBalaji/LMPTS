@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Prior Learning Review — LMPTS{% endblock %}
+{% block content %}
+<h1>Prior Learning Review</h1>
+
+<div class="tabs">
+  <a href="{{ url_for('instructor.plr', filter='pending') }}" class="{% if filter_ == 'pending' %}active{% endif %}">Pending Review</a>
+  <a href="{{ url_for('instructor.plr', filter='mine') }}" class="{% if filter_ == 'mine' %}active{% endif %}">My Reviews</a>
+  <a href="{{ url_for('instructor.plr', filter='all') }}" class="{% if filter_ == 'all' %}active{% endif %}">All</a>
+</div>
+
+<div class="panel">
+  {% if requests %}
+  <table>
+    <tr><th>Learner</th><th>Course</th><th>Pathway</th><th>Evidence</th><th>Status</th><th>Actions</th></tr>
+    {% for r in requests %}
+    <tr>
+      <td>{{ r.learner_name }}</td>
+      <td>{{ r.course_code }}</td>
+      <td>{{ r.pathway }}</td>
+      <td style="max-width:280px;">{{ r.evidence_description }}</td>
+      <td><span class="badge {{ 'ok' if r.status == 'APPROVED' else ('bad' if r.status == 'REJECTED' else 'warn') }}">{{ r.status }}</span></td>
+      <td>
+        {% if r.status == 'PENDING' %}
+        <details style="display:inline-block; min-width:260px;">
+          <summary class="btn small">Review</summary>
+          <form method="post" action="{{ url_for('instructor.plr_review', request_id=r.id) }}" style="margin-top:8px;">
+            <div class="form-group">
+              <label><input type="radio" name="recommendation" value="APPROVE" required> Approve</label>
+              <label><input type="radio" name="recommendation" value="REJECT"> Reject</label>
+              <label><input type="radio" name="recommendation" value="INFO_REQUESTED"> Request info</label>
+            </div>
+            <div class="form-group"><label>Note (required)</label><textarea name="note" required></textarea></div>
+            <button type="submit" class="btn small">Submit</button>
+          </form>
+        </details>
+        {% else %}
+        <span style="color:var(--muted);">{{ r.instructor_note or "—" }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No requests.</p>
+  {% endif %}
+</div>
+{% endblock %}

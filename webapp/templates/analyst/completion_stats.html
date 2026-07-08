@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Completion Stats — LMPTS{% endblock %}
+{% block content %}
+<h1>Prerequisite Chain Length</h1>
+
+<div class="panel">
+  {% if chains %}
+  <table>
+    <tr><th>Course</th><th>Chain Length</th><th>Study Level</th><th>Prerequisites</th></tr>
+    {% for c in chains %}
+    <tr>
+      <td>{{ c.course_code }}</td>
+      <td>{{ c.chain_length }}</td>
+      <td>{{ c.study_level }}</td>
+      <td>{{ c.prerequisites|join(", ") if c.prerequisites else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No course data yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

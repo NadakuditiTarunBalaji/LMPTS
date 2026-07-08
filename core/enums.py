@@ -154,3 +154,24 @@ class CompletionStatus(Enum):
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+
+
+class CancellationRequestStatus(Enum):
+    """
+    Status of a learner's course cancellation request.
+
+    Workflow:
+        PENDING        → Waiting for instructor review
+        APPROVED       → Instructor approved, learner unenrolled
+        REJECTED       → Instructor rejected, enrollment continues
+        WITHDRAWN      → Learner withdrew the request
+
+    Used by:
+        - CancellationRequest.status
+        - Instructor dashboard (PLR Approval equivalent)
+        - Enrollment workflow validation
+    """
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    WITHDRAWN = "WITHDRAWN"

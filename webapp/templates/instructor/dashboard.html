@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Instructor Dashboard — LMPTS{% endblock %}
+{% block content %}
+<h1>Instructor Dashboard</h1>
+
+<div class="stat-cards">
+  <div class="stat-card"><div class="value">{{ courses|length }}</div><div class="label">Total Courses</div></div>
+  <div class="stat-card"><div class="value">{{ plr_pending|length }}</div><div class="label">Pending PLR Reviews</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Quick actions</h2>
+    <p><a href="{{ url_for('instructor.courses') }}" class="btn small">My Courses</a></p>
+    <p><a href="{{ url_for('instructor.learners') }}" class="btn small">Monitor Learners</a></p>
+    <p><a href="{{ url_for('instructor.plr') }}" class="btn small">Prior Learning Review</a></p>
+  </div>
+
+  <div class="panel">
+    <h2>Notifications</h2>
+    {% if notifications %}
+    <form method="post" action="{{ url_for('instructor.mark_notifications_read') }}">
+      <button type="submit" class="btn small secondary" style="margin-bottom:10px;">Mark all read</button>
+    </form>
+    <ul style="padding-left:18px;">
+      {% for n in notifications[:10] %}
+      <li style="{% if not n.is_read %}font-weight:600;{% endif %} margin-bottom:6px;">{{ n.message }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No notifications.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

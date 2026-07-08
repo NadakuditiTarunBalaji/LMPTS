@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Recommendations — LMPTS{% endblock %}
+{% block content %}
+<h1>Recommended for you</h1>
+
+<div class="panel">
+  <form method="get">
+    <div class="form-group">
+      <label>Difficulty preference</label>
+      <select name="difficulty" onchange="this.form.submit()">
+        {% for d in ["BEGINNER", "INTERMEDIATE", "ADVANCED"] %}
+        <option value="{{ d }}" {% if d == difficulty %}selected{% endif %}>{{ d.title() }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+{% if recommendations %}
+<div class="grid-2">
+  {% for r in recommendations %}
+  <div class="panel">
+    <h2>{{ r.course_code }} — {{ r.course_name }}</h2>
+    <p style="color:var(--muted); font-size:0.88rem;">Score: {{ "%.1f"|format(r.score) }}</p>
+    {% if r.reasons %}<p style="font-size:0.88rem;">{{ r.reasons|join("; ") }}</p>{% endif %}
+    <form method="post" action="{{ url_for('learner.enroll') }}">
+      <input type="hidden" name="course_code" value="{{ r.course_code }}">
+      <button type="submit" class="btn small">Enroll now</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">No recommendations available right now.</p>
+{% endif %}
+{% endblock %}

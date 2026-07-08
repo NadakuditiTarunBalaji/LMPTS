@@ -27,6 +27,7 @@ def create_services(database) -> dict:
         PriorLearningRepository,
         NotificationRepository,
     )
+    
     from auth.auth_service import AuthService
     from algorithms.graph import CourseGraph
     from services.course_service import CourseService

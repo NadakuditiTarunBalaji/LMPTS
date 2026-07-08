@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Registration submitted — LMPTS{% endblock %}
+{% block guest_content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <h1>Registration submitted</h1>
+    <p class="subtitle">
+      Thanks, {{ username }}! Your account is now <strong>pending admin approval</strong>.
+      You'll be able to log in once an administrator reviews your registration.
+    </p>
+    <p class="footer-link"><a href="{{ url_for('auth.login') }}">Back to login</a></p>
+  </div>
+</div>
+{% endblock %}

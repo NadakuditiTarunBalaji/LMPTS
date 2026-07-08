@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}My Courses — LMPTS{% endblock %}
+{% block content %}
+<h1>My Courses</h1>
+
+<div class="panel">
+  <h2>Create draft course</h2>
+  <form method="post" action="{{ url_for('instructor.create_course') }}">
+    <div class="grid-2">
+      <div class="form-group"><label>Code</label><input type="text" name="code" required></div>
+      <div class="form-group"><label>Name</label><input type="text" name="name" required></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Difficulty</label>
+        <select name="difficulty">{% for d in difficulties %}<option value="{{ d.name }}">{{ d.value }}</option>{% endfor %}</select>
+      </div>
+      <div class="form-group"><label>Duration (hours)</label><input type="number" name="duration" min="1" required></div>
+    </div>
+    <div class="form-group"><label>Description</label><textarea name="description" rows="2"></textarea></div>
+    <button type="submit" class="btn">Save as draft</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>All courses</h2>
+  <table>
+    <tr><th>Code</th><th>Name</th><th>Status</th><th>Submission</th><th>Actions</th></tr>
+    {% for c in courses %}
+    <tr>
+      <td>{{ c.code }}</td>
+      <td>{{ c.name }}</td>
+      <td><span class="badge {{ 'ok' if c.status.value == 'PUBLISHED' else ('neutral' if c.status.value == 'DRAFT' else 'warn') }}">{{ c.status.value }}</span></td>
+      <td>{{ submission_status.get(c.code, "—") }}</td>
+      <td>
+        {% if c.status.value == 'DRAFT' %}
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Edit</summary>
+          <form method="post" action="{{ url_for('instructor.edit_course', code=c.code) }}" style="margin-top:8px; min-width:220px;">
+            <div class="form-group"><label>Name</label><input type="text" name="name" value="{{ c.name }}"></div>
+            <div class="form-group"><label>Description</label><textarea name="description">{{ c.description }}</textarea></div>
+            <div class="form-group"><label>Duration</label><input type="number" name="duration" value="{{ c.duration }}"></div>
+            <div class="form-group">
+              <label>Difficulty</label>
+              <select name="difficulty">{% for d in difficulties %}<option value="{{ d.name }}" {% if c.difficulty == d %}selected{% endif %}>{{ d.value }}</option>{% endfor %}</select>
+            </div>
+            <button type="submit" class="btn small">Save</button>
+          </form>
+        </details>
+        {% if submission_status.get(c.code) != "PENDING" %}
+        <form method="post" action="{{ url_for('instructor.submit_for_review', code=c.code) }}" class="inline" onsubmit="return confirm('Submit for admin review?');">
+          <button type="submit" class="btn small">Submit for review</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('instructor.delete_course', code=c.code) }}" class="inline" onsubmit="return confirm('Delete this draft?');">
+          <button type="submit" class="btn small danger">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

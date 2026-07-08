@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Pending Registrations — LMPTS{% endblock %}
+{% block content %}
+<h1>Pending Registrations</h1>
+
+<div class="tabs">
+  <a href="{{ url_for('admin.registrations', tab='pending') }}" class="{% if tab == 'pending' %}active{% endif %}">Pending ({{ pending|length }})</a>
+  <a href="{{ url_for('admin.registrations', tab='all') }}" class="{% if tab == 'all' %}active{% endif %}">All Users</a>
+</div>
+
+{% if tab == 'pending' %}
+<div class="panel">
+  {% if pending %}
+  <table>
+    <tr><th>Username</th><th>Full name</th><th>Email</th><th>Actions</th></tr>
+    {% for user in pending %}
+    <tr>
+      <td>{{ user.username }}</td>
+      <td>{{ user.full_name }}</td>
+      <td>{{ user.email }}</td>
+      <td>
+        <details style="display:inline-block;">
+          <summary class="btn small">Approve</summary>
+          <form method="post" action="{{ url_for('admin.approve_registration', user_id=user.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Welcome note (optional)</label><input type="text" name="note"></div>
+            <button type="submit" class="btn small">Confirm approve</button>
+          </form>
+        </details>
+        <details style="display:inline-block;">
+          <summary class="btn small danger">Reject</summary>
+          <form method="post" action="{{ url_for('admin.reject_registration', user_id=user.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Reason (required)</label><input type="text" name="reason" required></div>
+            <button type="submit" class="btn small danger">Confirm reject</button>
+          </form>
+        </details>
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Request info</summary>
+          <form method="post" action="{{ url_for('admin.request_more_information', user_id=user.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Message (required)</label><input type="text" name="message" required></div>
+            <button type="submit" class="btn small secondary">Send</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No pending registrations.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if tab == 'all' %}
+<div class="panel">
+  <table>
+    <tr><th>Username</th><th>Role</th><th>Status</th><th>Active</th><th>Actions</th></tr>
+    {% for user in all_users %}
+    <tr>
+      <td>{{ user.username }}</td>
+      <td>{{ user.role.value }}</td>
+      <td><span class="badge {{ 'ok' if user.account_status.value == 'ACTIVE' else ('bad' if user.account_status.value == 'REJECTED' else 'warn') }}">{{ user.account_status.value }}</span></td>
+      <td>{{ "Yes" if user.is_active else "No" }}</td>
+      <td>
+        {% if user.is_active %}
+        <form method="post" action="{{ url_for('admin.deactivate_user', user_id=user.id) }}" class="inline">
+          <button type="submit" class="btn small danger">Deactivate</button>
+        </form>
+        {% else %}
+        <form method="post" action="{{ url_for('admin.reactivate_user', user_id=user.id) }}" class="inline">
+          <button type="submit" class="btn small">Reactivate</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

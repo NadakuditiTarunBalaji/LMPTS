@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Monitor Learners — LMPTS{% endblock %}
+{% block content %}
+<h1>Monitor Learners</h1>
+
+<div class="panel">
+  <form method="get">
+    <div class="form-group">
+      <label>Select learner</label>
+      <select name="learner_id" onchange="this.form.submit()">
+        <option value="">— Select —</option>
+        {% for l in learners %}
+        <option value="{{ l.id }}" {% if l.id == selected_id %}selected{% endif %}>{{ l.name }} ({{ l.email }})</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+{% if selected_id %}
+<div class="panel">
+  <h2>Enrollments</h2>
+  {% if enrollments %}
+  <table>
+    <tr><th>Course</th><th>Status</th><th>Score</th><th>Actions</th></tr>
+    {% for e in enrollments %}
+    <tr>
+      <td>{{ e.course_code }}</td>
+      <td><span class="badge {{ 'ok' if e.status.value == 'COMPLETED' else ('neutral' if e.status.value == 'CANCELLED' else 'warn') }}">{{ e.status.value }}</span></td>
+      <td>{{ e.score if e.score is not none else "—" }}</td>
+      <td>
+        {% if e.status.value == 'ENROLLED' %}
+        <form method="post" action="{{ url_for('instructor.start_enrollment', learner_id=selected_id, code=e.course_code) }}" class="inline">
+          <button type="submit" class="btn small">Mark in progress</button>
+        </form>
+        {% endif %}
+        {% if e.status.value in ['ENROLLED', 'IN_PROGRESS'] %}
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Mark complete</summary>
+          <form method="post" action="{{ url_for('instructor.complete_enrollment', learner_id=selected_id, code=e.course_code) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Score (0-100)</label><input type="number" name="score" min="0" max="100" step="0.1" required></div>
+            <button type="submit" class="btn small">Save</button>
+          </form>
+        </details>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No enrollments for this learner.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Learning Path — LMPTS{% endblock %}
+{% block content %}
+<h1>Learning Path</h1>
+
+<div class="panel">
+  <form method="get">
+    <div class="form-group">
+      <label>Goal course</label>
+      <select name="goal" onchange="this.form.submit()">
+        <option value="">— Select a goal —</option>
+        {% for c in courses %}
+        <option value="{{ c.code }}" {% if c.code == goal %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+{% if roadmap %}
+<div class="panel">
+  <h2>Roadmap to {{ roadmap.goal }}</h2>
+  <div class="progress-bar"><div class="fill" style="width: {{ roadmap.percentage }}%"></div></div>
+  <p style="color:var(--muted); margin-top:6px;">{{ roadmap.done }}/{{ roadmap.total }} courses done ({{ "%.1f"|format(roadmap.percentage) }}%)</p>
+
+  <div class="grid-2" style="margin-top:16px;">
+    <div>
+      <h2 style="font-size:1rem;">Completed</h2>
+      {% if roadmap.completed %}<p>{{ roadmap.completed|join(", ") }}</p>{% else %}<p class="empty-state">None yet.</p>{% endif %}
+    </div>
+    <div>
+      <h2 style="font-size:1rem;">In progress</h2>
+      {% if roadmap.in_progress %}<p>{{ roadmap.in_progress|join(", ") }}</p>{% else %}<p class="empty-state">None.</p>{% endif %}
+    </div>
+  </div>
+
+  <h2 style="font-size:1rem; margin-top:16px;">Remaining</h2>
+  {% if roadmap.remaining %}<p>{{ roadmap.remaining|join(" → ") }}</p>{% else %}<p class="empty-state">Nothing left — goal reached!</p>{% endif %}
+
+  <h2 style="font-size:1rem; margin-top:16px;">Full path</h2>
+  <p>{{ roadmap.full_path|join(" → ") }}</p>
+</div>
+{% endif %}
+{% endblock %}

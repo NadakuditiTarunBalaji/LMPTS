@@ -19,7 +19,31 @@ Used across every layer: Core, Auth, Services, Algorithms, GUI, Analytics
 
 from enum import Enum
 
+# Add this to core/enums.py — after CompletionStatus
 
+class AccountStatus(Enum):
+    """
+    Account activation status for user accounts.
+
+    ACTIVE   : Account is approved and can log in normally.
+    PENDING  : Account registered but awaiting admin approval.
+    REJECTED : Registration was rejected by admin.
+    INACTIVE : Account was deactivated by admin.
+
+    Used by:
+        - User model        (user.account_status)
+        - AuthService       (login checks)
+        - AccountService    (approval workflow)
+        - PendingRegistrationsScreen (admin UI)
+
+    Default for new accounts created by admin: ACTIVE
+    Default for self-registered learners:      PENDING
+    """
+    ACTIVE   = "ACTIVE"
+    PENDING  = "PENDING"
+    REJECTED = "REJECTED"
+    INACTIVE = "INACTIVE"
+    
 class DifficultyLevel(Enum):
     """
     How hard a course is.

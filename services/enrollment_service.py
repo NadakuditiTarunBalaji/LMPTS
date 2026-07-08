@@ -176,6 +176,10 @@ class EnrollmentService:
             )
 
         # ── Step 3: Check duplicate enrollment ────────────────────────────────
+        # An enrollments row is unique per (learner_id, course_code) regardless
+        # of status, so any existing row -- not just ENROLLED/IN_PROGRESS --
+        # must be a soft failure here, or the INSERT below raises an unhandled
+        # sqlite3.IntegrityError instead of the documented soft-fail contract.
         existing = self._enrollment_repo.get_enrollment_by_learner_course(
             learner_id, course_code
         )
@@ -192,6 +196,14 @@ class EnrollmentService:
                         f"(status: {existing.status.value})."
                     ),
                 )
+            return EnrollmentResult(
+                success=False,
+                message=(
+                    f"Learner {learner_id} already has an enrollment record "
+                    f"for '{course_code}' "
+                    f"(status: {existing.status.value})."
+                ),
+            )
 
         # ── Step 4: Validate prerequisites ────────────────────────────────────
         if not bypass_prereqs:

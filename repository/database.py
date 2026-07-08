@@ -30,7 +30,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -49,11 +49,19 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 SQL_CREATE_USERS = """
 CREATE TABLE IF NOT EXISTS users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT    NOT NULL UNIQUE,
-    password_hash TEXT    NOT NULL,
-    role          TEXT    NOT NULL,
-    created_at    TEXT    NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    username              TEXT    NOT NULL UNIQUE,
+    password_hash         TEXT    NOT NULL,
+    role                  TEXT    NOT NULL,
+    created_at            TEXT    NOT NULL,
+    is_active             INTEGER NOT NULL DEFAULT 1,
+    account_status        TEXT    NOT NULL DEFAULT 'ACTIVE',
+    rejection_reason      TEXT    DEFAULT '',
+    full_name             TEXT    DEFAULT '',
+    email                 TEXT    DEFAULT '',
+    bio                   TEXT    DEFAULT '',
+    preferred_difficulty  TEXT    DEFAULT 'BEGINNER',
+    profile_updated_at    TEXT    DEFAULT ''
 )
 """
 
@@ -381,9 +389,14 @@ class Database:
             1. Add method: def _migrate_v2(self, conn)
             2. Add entry:  2: self._migrate_v2
         """
+        # 4. Update MIGRATIONS dict in _run_migrations method
+# Find the MIGRATIONS dict and add entry 3:
         MIGRATIONS = {
             1: self._migrate_v1,
             2: self._migrate_v2,   # ADD THIS
+            3: self._migrate_v3,  
+            4: self._migrate_v4,   # ADD THIS
+
 
         }
 
@@ -463,7 +476,66 @@ class Database:
             "ON notifications(user_id)"
         )
         logger.debug("Migration v2: user activation + new tables")
+    # 3. Add _migrate_v3 method inside Database class
+    def _migrate_v3(self, conn: sqlite3.Connection) -> None:
+        """
+        Migration v3: Add account activation columns to users table.
 
+        Columns added:
+            is_active        → 1 = active, 0 = inactive
+            account_status   → ACTIVE / PENDING / REJECTED
+            rejection_reason → admin's rejection reason
+            full_name        → learner's full name from registration
+            email            → learner's email from registration
+        """
+        alterations = [
+            "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+            "ALTER TABLE users ADD COLUMN rejection_reason TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN full_name TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN email TEXT DEFAULT ''",
+        ]
+        for sql in alterations:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # Column already exists — safe to skip
+
+        # All existing users are ACTIVE by default
+        conn.execute(
+            "UPDATE users SET is_active = 1, account_status = 'ACTIVE' "
+            "WHERE account_status IS NULL OR account_status = ''"
+        )
+
+        # Index for fast pending lookups
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_status "
+            "ON users(account_status)"
+        )
+        logger.debug("Migration v3: account activation columns added")
+
+    def _migrate_v4(self, conn: sqlite3.Connection) -> None:
+        """
+        Migration v4: Add profile management columns.
+
+        Columns added:
+            bio                  → about-me description (all roles)
+            preferred_difficulty → learner's difficulty preference
+            profile_updated_at   → last profile modification timestamp
+        """
+        alterations = [
+            "ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN preferred_difficulty "
+            "TEXT DEFAULT 'BEGINNER'",
+            "ALTER TABLE users ADD COLUMN profile_updated_at "
+            "TEXT DEFAULT ''",
+        ]
+        for sql in alterations:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # Column already exists
+        logger.debug("Migration v4: profile columns added")
     def get_schema_version(self) -> int:
         """
         Return the current schema version number.

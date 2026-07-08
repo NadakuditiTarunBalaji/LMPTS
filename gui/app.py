@@ -3,11 +3,8 @@ app.py
 ------
 LMPTS Application Entry Point.
 
-Updated to include:
-    - PriorLearningService
-    - NotificationService
-    - Learner account activation
-    - New database tables (migration v2)
+Run from project root:
+    python gui/app.py
 """
 
 import sys
@@ -19,7 +16,6 @@ if ROOT not in sys.path:
 
 
 def create_services(database) -> dict:
-    """Build and return the global service container."""
     from repository.user_repo import SQLiteUserRepository
     from repository.learner_repo import SQLiteLearnerRepository
     from repository.course_repo import SQLiteCourseRepository
@@ -41,8 +37,10 @@ def create_services(database) -> dict:
     from services.learning_path_service import LearningPathService
     from services.recommendation_service import RecommendationService
     from services.prior_learning_service import PriorLearningService
+    from services.account_service import AccountService
+    from services.profile_service import ProfileService
 
-    # ── Repositories ──────────────────────────────────────────────────────────
+
     user_repo       = SQLiteUserRepository(database)
     learner_repo    = SQLiteLearnerRepository(database)
     course_repo     = SQLiteCourseRepository(database)
@@ -52,11 +50,14 @@ def create_services(database) -> dict:
     notif_repo      = NotificationRepository(database)
     cancellation_request_repo = SQLiteCancellationRequestRepository(database)
 
-    # ── Shared graph ──────────────────────────────────────────────────────────
     graph = CourseGraph()
 
-    # ── Services ──────────────────────────────────────────────────────────────
     course_service = CourseService(course_repo, graph)
+    profile_service = ProfileService(
+    user_repo         = user_repo,
+    learner_repo      = learner_repo,
+    notification_repo = notif_repo,
+    )
 
     enrollment_service = EnrollmentService(
         enrollment_repo = enrollment_repo,
@@ -69,42 +70,48 @@ def create_services(database) -> dict:
     )
 
     progress_service = ProgressService(
-        progress_repo   = progress_repo,
-        enrollment_repo = enrollment_repo,
-        learner_repo    = learner_repo,
-        course_repo     = course_repo,
-        graph           = graph,
+        progress_repo=progress_repo,
+        enrollment_repo=enrollment_repo,
+        learner_repo=learner_repo,
+        course_repo=course_repo,
+        graph=graph,
     )
 
     analytics_service = AnalyticsService(
-        enrollment_repo = enrollment_repo,
-        progress_repo   = progress_repo,
-        learner_repo    = learner_repo,
-        course_repo     = course_repo,
-        graph           = graph,
+        enrollment_repo=enrollment_repo,
+        progress_repo=progress_repo,
+        learner_repo=learner_repo,
+        course_repo=course_repo,
+        graph=graph,
     )
 
     learning_path_service = LearningPathService(
-        enrollment_repo = enrollment_repo,
-        learner_repo    = learner_repo,
-        course_repo     = course_repo,
-        graph           = graph,
+        enrollment_repo=enrollment_repo,
+        learner_repo=learner_repo,
+        course_repo=course_repo,
+        graph=graph,
     )
 
     recommendation_service = RecommendationService(
-        enrollment_repo = enrollment_repo,
-        learner_repo    = learner_repo,
-        course_repo     = course_repo,
-        graph           = graph,
+        enrollment_repo=enrollment_repo,
+        learner_repo=learner_repo,
+        course_repo=course_repo,
+        graph=graph,
     )
 
     prior_learning_service = PriorLearningService(
-        plr_repo          = plr_repo,
-        notification_repo = notif_repo,
-        learner_repo      = learner_repo,
-        course_repo       = course_repo,
-        user_repo         = user_repo,
-        enrollment_service = enrollment_service,
+        plr_repo=plr_repo,
+        notification_repo=notif_repo,
+        learner_repo=learner_repo,
+        course_repo=course_repo,
+        user_repo=user_repo,
+        enrollment_service=enrollment_service,
+    )
+
+    account_service = AccountService(
+        user_repo=user_repo,
+        learner_repo=learner_repo,
+        notification_repo=notif_repo,
     )
 
     auth_service = AuthService(user_repo)
@@ -118,23 +125,38 @@ def create_services(database) -> dict:
         "learning_path_service"  : learning_path_service,
         "recommendation_service" : recommendation_service,
         "prior_learning_service" : prior_learning_service,
+        "account_service"        : account_service,
         "user_repo"              : user_repo,
         "learner_repo"           : learner_repo,
         "course_repo"            : course_repo,
         "plr_repo"               : plr_repo,
         "notification_repo"      : notif_repo,
         "database"               : database,
+        "profile_service": profile_service,
+
     }
 
 
-def seed_sample_data(services: dict) -> None:
-    """Seed sample courses and learner profiles."""
+def ensure_defaults_active(services):
+    from core.enums import AccountStatus
+    user_repo = services["user_repo"]
+    for username in ("admin", "learner", "analyst", "instructor"):
+        user = user_repo.find_by_username(username)
+        if user and user.account_status != AccountStatus.ACTIVE:
+            user_repo.update_account_status(
+                user_id=user.id,
+                is_active=True,
+                account_status=AccountStatus.ACTIVE,
+            )
+
+
+def seed_sample_data(services):
     course_svc = services["course_service"]
     if course_svc.count_courses() > 0:
         return
 
     from core.course import Course
-    from core.enums import DifficultyLevel, CourseStatus
+    from core.enums import DifficultyLevel, CourseStatus, UserRole
 
     courses = [
         Course("CS101", "Intro to Programming",
@@ -183,62 +205,79 @@ def seed_sample_data(services: dict) -> None:
     from core.learner import Learner
     user_repo    = services["user_repo"]
     learner_repo = services["learner_repo"]
+    auth_service = services["auth_service"]
 
     learner_user = user_repo.find_by_username("learner")
-    if learner_user and not learner_repo.get_learner_by_user_id(
-        learner_user.id
-    ):
-        try:
-            learner_repo.create_learner(Learner(
-                name    = "Default Learner",
-                email   = "learner@lmpts.edu",
-                user_id = learner_user.id,
-            ))
-        except Exception:
-            pass
+    if learner_user:
+        if not learner_repo.get_learner_by_user_id(learner_user.id):
+            try:
+                learner_repo.create_learner(Learner(
+                    name="Default Learner",
+                    email="learner@lmpts.edu",
+                    user_id=learner_user.id,
+                ))
+            except Exception:
+                pass
 
-    # Create instructor account if not exists
-    auth_service = services["auth_service"]
-    from core.enums import UserRole
     if user_repo.find_by_username("instructor") is None:
         try:
-            auth_service.register(
-                "instructor", "instructor123", UserRole.INSTRUCTOR
-            )
+            auth_service.register("instructor", "instructor123", UserRole.INSTRUCTOR)
+            instr = user_repo.find_by_username("instructor")
+            if instr:
+                from core.enums import AccountStatus
+                user_repo.update_account_status(
+                    user_id=instr.id,
+                    is_active=True,
+                    account_status=AccountStatus.ACTIVE,
+                )
         except Exception:
             pass
 
     print("Sample data seeded.")
 
 
-def on_login_success(user, services: dict) -> None:
-    """Open the main window after successful login."""
+def on_login_success(user, services):
     from gui.main_window import MainWindow
     window = MainWindow(user, services)
     window.mainloop()
 
 
 def main():
-    """Application entry point."""
-    print("Starting LMPTS...")
+    print("=" * 50)
+    print("  LMPTS - Learning Management System")
+    print("=" * 50)
 
     from repository.database import Database
     db = Database()
     db.initialize()
-    print(f"Database: {db.db_path}  Schema v{db.get_schema_version()}")
+    print(f"Database : {db.db_path}")
+    print(f"Schema   : v{db.get_schema_version()}")
 
     services = create_services(db)
-    print("Services initialized.")
+    print("Services : initialized")
 
     auth = services["auth_service"]
     auth.create_default_users()
+    ensure_defaults_active(services)
+    print("Accounts : defaults ready")
 
     seed_sample_data(services)
 
+    print("=" * 50)
+    print()
+    print("Default credentials:")
+    print("  admin      / admin123")
+    print("  learner    / learner123")
+    print("  analyst    / analyst123")
+    print("  instructor / instructor123")
+    print()
+
     from gui.login_window import LoginWindow
+    print("Opening login window...")
+
     login_window = LoginWindow(
-        services         = services,
-        on_login_success = on_login_success,
+        services=services,
+        on_login_success=on_login_success,
     )
     login_window.mainloop()
     print("LMPTS closed.")

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Analytics Dashboard — LMPTS{% endblock %}
+{% block content %}
+<h1>Analytics Dashboard</h1>
+
+<div class="stat-cards">
+  <div class="stat-card"><div class="value">{{ overview.total_courses }}</div><div class="label">Courses</div></div>
+  <div class="stat-card"><div class="value">{{ overview.total_learners }}</div><div class="label">Learners</div></div>
+  <div class="stat-card"><div class="value">{{ overview.total_enrollments }}</div><div class="label">Enrollments</div></div>
+  <div class="stat-card"><div class="value">{{ overview.total_completions }}</div><div class="label">Completions</div></div>
+  <div class="stat-card"><div class="value">{{ "%.1f"|format(overview.overall_completion_rate) }}%</div><div class="label">Completion Rate</div></div>
+</div>
+
+<div class="panel">
+  <h2>Difficulty distribution</h2>
+  <table>
+    <tr><th>Beginner</th><th>Intermediate</th><th>Advanced</th><th>Total</th></tr>
+    <tr>
+      <td>{{ distribution.BEGINNER }}</td>
+      <td>{{ distribution.INTERMEDIATE }}</td>
+      <td>{{ distribution.ADVANCED }}</td>
+      <td>{{ distribution.total }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Most enrolled courses</h2>
+  {% if most_enrolled %}
+  <table>
+    <tr><th>Course</th><th>Difficulty</th><th>Enrollments</th></tr>
+    {% for c in most_enrolled %}
+    <tr><td>{{ c.course_code }} — {{ c.course_name }}</td><td>{{ c.difficulty }}</td><td>{{ c.enrollments }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No enrollment data yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

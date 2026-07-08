@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Learner Activity — LMPTS{% endblock %}
+{% block content %}
+<h1>Learner Activity</h1>
+
+<div class="panel">
+  {% if report %}
+  <table>
+    <tr><th>Learner</th><th>Enrolled</th><th>Completed</th><th>In Progress</th><th>Completion Rate</th><th>Avg Score</th></tr>
+    {% for row in report %}
+    <tr>
+      <td>{{ row.learner_name }}</td>
+      <td>{{ row.total_enrolled }}</td>
+      <td>{{ row.completed }}</td>
+      <td>{{ row.in_progress }}</td>
+      <td>{{ "%.1f"|format(row.completion_rate) }}%</td>
+      <td>{{ "%.1f"|format(row.average_score) if row.average_score is not none else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No learner activity yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

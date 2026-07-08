@@ -66,7 +66,7 @@ def fix_file(filepath: str) -> dict:
         with open(filepath, "rb") as fh:
             raw = fh.read()
     except OSError as exc:
-        result["error"] = f"Cannot read file: {exc}"
+        result["error"] = f"not read file: {exc}"
         return result
 
     # ── Count null bytes ──────────────────────────────────────────────────────

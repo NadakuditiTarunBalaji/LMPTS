@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}My Profile — LMPTS{% endblock %}
+{% block content %}
+<h1>My Profile</h1>
+
+<div class="tabs">
+  <a href="{{ url_for('profile.view', tab='info') }}" class="{% if tab == 'info' %}active{% endif %}">Personal Information</a>
+  <a href="{{ url_for('profile.view', tab='password') }}" class="{% if tab == 'password' %}active{% endif %}">Change Password</a>
+  <a href="{{ url_for('profile.view', tab='account') }}" class="{% if tab == 'account' %}active{% endif %}">Account Details</a>
+</div>
+
+{% if tab == 'info' %}
+<div class="panel">
+  <h2>Personal Information</h2>
+  <form method="post" action="{{ url_for('profile.update_personal_info') }}">
+    <div class="form-group">
+      <label>Full name</label>
+      <input type="text" name="full_name" value="{{ user.full_name }}" required>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" name="email" value="{{ user.email }}" required>
+    </div>
+    <div class="form-group">
+      <label>Bio <span style="color:var(--muted); font-weight:400;">(max 500 chars)</span></label>
+      <textarea name="bio" maxlength="500" rows="3">{{ user.bio }}</textarea>
+    </div>
+    {% if user.role.value == 'LEARNER' %}
+    <div class="form-group">
+      <label>Preferred difficulty</label>
+      <select name="preferred_difficulty">
+        {% for d in difficulties %}
+          <option value="{{ d.name }}" {% if user.preferred_difficulty == d %}selected{% endif %}>{{ d.value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <button type="submit" class="btn">Save changes</button>
+  </form>
+</div>
+{% endif %}
+
+{% if tab == 'password' %}
+<div class="panel">
+  <h2>Change Password</h2>
+  <p style="color:var(--muted); font-size:0.88rem;">Must be 8+ characters, include an uppercase letter and a digit, and differ from your current password.</p>
+  <form method="post" action="{{ url_for('profile.change_password') }}">
+    <div class="form-group">
+      <label>Current password</label>
+      <input type="password" name="old_password" required>
+    </div>
+    <div class="form-group">
+      <label>New password</label>
+      <input type="password" name="new_password" minlength="8" required>
+    </div>
+    <div class="form-group">
+      <label>Confirm new password</label>
+      <input type="password" name="confirm_password" minlength="8" required>
+    </div>
+    <button type="submit" class="btn">Change password</button>
+  </form>
+</div>
+{% endif %}
+
+{% if tab == 'account' %}
+<div class="panel">
+  <h2>Account Details</h2>
+  <table>
+    <tr><th>User ID</th><td>{{ user.id }}</td></tr>
+    <tr><th>Username</th><td>{{ user.username }}</td></tr>
+    <tr><th>Role</th><td>{{ user.role.value }}</td></tr>
+    <tr><th>Account status</th><td>{{ user.account_status.value }}</td></tr>
+    <tr><th>Active</th><td>{{ "Yes" if user.is_active else "No" }}</td></tr>
+    <tr><th>Member since</th><td>{{ user.created_at }}</td></tr>
+    <tr><th>Last profile edit</th><td>{{ user.profile_updated_at or "Never" }}</td></tr>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

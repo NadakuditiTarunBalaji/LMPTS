@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Course Approvals — LMPTS{% endblock %}
+{% block content %}
+<h1>Course Approvals</h1>
+
+<div class="tabs">
+  {% for s in ["PENDING", "ALL", "APPROVED", "REJECTED"] %}
+  <a href="{{ url_for('admin.course_approvals', status=s) }}" class="{% if status_filter == s %}active{% endif %}">{{ s.title() }}</a>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  {% if submissions %}
+  <table>
+    <tr><th>Course</th><th>Instructor</th><th>Submitted</th><th>Status</th><th>Actions</th></tr>
+    {% for s in submissions %}
+    <tr>
+      <td>{{ s.course_code }}{% if s.course %} — {{ s.course.name }}{% endif %}</td>
+      <td>#{{ s.instructor_id }}</td>
+      <td>{{ s.submitted_at }}</td>
+      <td><span class="badge {{ 'ok' if s.status == 'APPROVED' else ('bad' if s.status == 'REJECTED' else 'warn') }}">{{ s.status }}</span></td>
+      <td>
+        {% if s.status == 'PENDING' %}
+        <details style="display:inline-block;">
+          <summary class="btn small">Approve &amp; publish</summary>
+          <form method="post" action="{{ url_for('admin.approve_course_submission', submission_id=s.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Admin note (optional)</label><input type="text" name="note"></div>
+            <button type="submit" class="btn small">Confirm</button>
+          </form>
+        </details>
+        <details style="display:inline-block;">
+          <summary class="btn small danger">Reject</summary>
+          <form method="post" action="{{ url_for('admin.reject_course_submission', submission_id=s.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Reason (required)</label><input type="text" name="note" required></div>
+            <button type="submit" class="btn small danger">Confirm</button>
+          </form>
+        </details>
+        {% else %}
+        <span style="color:var(--muted);">{{ s.admin_note or "—" }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No submissions.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -30,6 +30,7 @@ class PrerequisiteManagementScreen(tk.Frame):
         super().__init__(parent, bg=CONTENT_BG)
         self._services = services
         self._selected_course: Optional[str] = None
+        self._code_by_display: dict = {}
         self._build()
         self._load_courses()
 
@@ -203,10 +204,13 @@ class PrerequisiteManagementScreen(tk.Frame):
                 return
 
             courses = service.get_all_courses()
-            codes   = [c.code for c in courses]
+            self._code_by_display = {
+                f"{c.code} - {c.name}": c.code for c in courses
+            }
+            displays = list(self._code_by_display.keys())
 
-            self._course_combo["values"]    = codes
-            self._prereq_add_combo["values"] = codes
+            self._course_combo["values"]     = displays
+            self._prereq_add_combo["values"] = displays
 
             self._update_graph()
 
@@ -215,7 +219,9 @@ class PrerequisiteManagementScreen(tk.Frame):
 
     def _on_course_selected(self, event=None):
         """Load prerequisites for the selected course."""
-        self._selected_course = self._course_var.get()
+        self._selected_course = self._code_by_display.get(
+            self._course_var.get()
+        )
         self._load_prerequisites()
         self._update_graph()
 
@@ -272,8 +278,8 @@ class PrerequisiteManagementScreen(tk.Frame):
 
     def _add_prerequisite(self):
         """Add the selected prerequisite to the selected course."""
-        course_code = self._course_var.get()
-        prereq_code = self._prereq_add_var.get()
+        course_code = self._code_by_display.get(self._course_var.get())
+        prereq_code = self._code_by_display.get(self._prereq_add_var.get())
 
         if not course_code:
             show_info(self, "Select Course",
@@ -307,7 +313,7 @@ class PrerequisiteManagementScreen(tk.Frame):
 
     def _remove_prerequisite(self):
         """Remove the selected prerequisite from the listbox."""
-        course_code = self._course_var.get()
+        course_code = self._code_by_display.get(self._course_var.get())
         selection   = self._prereq_listbox.curselection()
 
         if not course_code:

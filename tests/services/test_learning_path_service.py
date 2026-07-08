@@ -19,6 +19,9 @@ from repository.enrollment_repo import (
     SQLiteEnrollmentRepository,
     SQLiteProgressRepository,
 )
+from repository.cancellation_request_repo import (
+    SQLiteCancellationRequestRepository,
+)
 from services.course_service import CourseService
 from services.enrollment_service import EnrollmentService
 from services.learning_path_service import LearningPathService
@@ -50,6 +53,7 @@ def repos(db):
         "learner":    SQLiteLearnerRepository(db),
         "enrollment": SQLiteEnrollmentRepository(db),
         "progress":   SQLiteProgressRepository(db),
+        "cancellation_request": SQLiteCancellationRequestRepository(db),
     }
 
 
@@ -65,6 +69,7 @@ def enrollment_service(repos, graph, db):
         progress_repo   = repos["progress"],
         learner_repo    = repos["learner"],
         course_repo     = repos["course"],
+        cancellation_request_repo = repos["cancellation_request"],
         graph           = graph,
         database        = db,
     )

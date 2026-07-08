@@ -8,7 +8,7 @@ Responsibilities:
     - Create enrollment records atomically
     - Process completions (update enrollment + progress + learner)
     - Handle transfer credits and admin-approved exemptions
-    - Cancel enrollments
+    - Request and manage course cancellations
 
 Algorithm integration:
     PrerequisiteValidator → checks prerequisites before enrollment
@@ -25,16 +25,22 @@ from typing import List, Optional, Set
 
 from core.enrollment import Enrollment
 from core.course_progress import CourseProgress
-from core.enums import EnrollmentStatus, CompletionStatus
+from core.enums import EnrollmentStatus, CompletionStatus, CancellationRequestStatus
+from core.cancellation_request import CancellationRequest
 from core.exceptions import (
     LearnerNotFoundError,
     CourseNotFoundError,
     DuplicateEnrollmentError,
     PrerequisiteNotMetError,
+    ValidationError,
+    EnrollmentError,
 )
 from repository.enrollment_repo import (
     EnrollmentRepositoryInterface,
     ProgressRepositoryInterface,
+)
+from repository.cancellation_request_repo import (
+    CancellationRequestRepositoryInterface,
 )
 from repository.learner_repo import LearnerRepositoryInterface
 from repository.course_repo import CourseRepositoryInterface
@@ -73,12 +79,13 @@ class EnrollmentService:
     Orchestrates all enrollment operations.
 
     Dependencies (injected):
-        enrollment_repo : EnrollmentRepositoryInterface
-        progress_repo   : ProgressRepositoryInterface
-        learner_repo    : LearnerRepositoryInterface
-        course_repo     : CourseRepositoryInterface
-        graph           : CourseGraph (from CourseService)
-        database        : Database (for cross-repo transactions)
+        enrollment_repo         : EnrollmentRepositoryInterface
+        progress_repo           : ProgressRepositoryInterface
+        learner_repo            : LearnerRepositoryInterface
+        course_repo             : CourseRepositoryInterface
+        cancellation_request_repo : CancellationRequestRepositoryInterface
+        graph                   : CourseGraph (from CourseService)
+        database                : Database (for cross-repo transactions)
 
     Usage (production):
         service = create_enrollment_service(db)
@@ -87,6 +94,7 @@ class EnrollmentService:
         service = EnrollmentService(
             enrollment_repo, progress_repo,
             learner_repo, course_repo,
+            cancellation_request_repo,
             graph, database
         )
     """
@@ -97,6 +105,7 @@ class EnrollmentService:
         progress_repo:   ProgressRepositoryInterface,
         learner_repo:    LearnerRepositoryInterface,
         course_repo:     CourseRepositoryInterface,
+        cancellation_request_repo: CancellationRequestRepositoryInterface,
         graph:           CourseGraph,
         database,
     ):
@@ -104,6 +113,7 @@ class EnrollmentService:
         self._progress_repo   = progress_repo
         self._learner_repo    = learner_repo
         self._course_repo     = course_repo
+        self._cancellation_request_repo = cancellation_request_repo
         self._graph           = graph
         self._db              = database
 
@@ -249,11 +259,200 @@ class EnrollmentService:
             ),
         )
 
+    def request_cancellation(
+        self,
+        learner_id: int,
+        course_code: str,
+        learner_note: str = "",
+    ) -> CancellationRequest:
+        """
+        Submit a request to cancel a course enrollment.
+
+        A learner can only request cancellation if they haven't started
+        the course yet (status is ENROLLED).
+
+        Process:
+            1. Verify enrollment exists and is in ENROLLED state
+            2. Check for existing PENDING cancellation request
+            3. Create and persist the cancellation request
+
+        Args:
+            learner_id  : Learner's ID.
+            course_code : Course code to cancel.
+            learner_note: Reason for cancellation (optional).
+
+        Returns:
+            CancellationRequest: The created request object.
+
+        Raises:
+            LearnerNotFoundError: If enrollment not found.
+            EnrollmentError: If enrollment already started or completed.
+            ValidationError: If duplicate PENDING request exists.
+        """
+        # ── Verify enrollment exists ───────────────────────────────────────
+        enrollment = self._enrollment_repo.get_enrollment_by_learner_course(
+            learner_id, course_code
+        )
+        if enrollment is None:
+            raise LearnerNotFoundError(
+                f"No enrollment found for learner {learner_id} "
+                f"in '{course_code}'"
+            )
+
+        # ── Verify enrollment is in ENROLLED state ─────────────────────────
+        if enrollment.status != EnrollmentStatus.ENROLLED:
+            raise EnrollmentError(
+                f"Cannot request cancellation for enrollment in status "
+                f"'{enrollment.status.value}'. Cancellation is only allowed "
+                f"before starting the course (status: ENROLLED)."
+            )
+
+        # ── Create and persist the cancellation request ─────────────────────
+        request = CancellationRequest(
+            learner_id=learner_id,
+            course_code=course_code,
+            learner_note=learner_note,
+            status=CancellationRequestStatus.PENDING,
+        )
+
+        return self._cancellation_request_repo.create_request(request)
+
+    def approve_cancellation(
+        self,
+        request_id: int,
+        instructor_id: int,
+        instructor_note: str = "",
+    ) -> CancellationRequest:
+        """
+        Approve a cancellation request (instructor action).
+
+        When approved:
+            - The cancellation request status becomes APPROVED
+            - The enrollment is deleted from the database
+            - Progress record is cleared
+            - The learner becomes eligible to re-enroll
+
+        Args:
+            request_id     : ID of the cancellation request.
+            instructor_id  : ID of the instructor approving.
+            instructor_note: Optional decision comment.
+
+        Returns:
+            CancellationRequest: Updated request object.
+
+        Raises:
+            LearnerNotFoundError: If request not found.
+        """
+        # ── Retrieve the cancellation request ──────────────────────────────
+        request = self._cancellation_request_repo.get_request(request_id)
+        if request is None:
+            raise LearnerNotFoundError(
+                f"Cancellation request {request_id} not found"
+            )
+
+        # ── Approve the request ────────────────────────────────────────────
+        request.approve(instructor_id, instructor_note)
+
+        # ── Delete enrollment and progress atomically ──────────────────────
+        with self._db.transaction() as conn:
+            # Update the request status
+            self._cancellation_request_repo.update_request(request)
+
+            # Delete the enrollment (this will allow re-enrollment)
+            conn.execute(
+                """
+                DELETE FROM enrollments
+                WHERE learner_id = ? AND course_code = ?
+                """,
+                (request.learner_id, request.course_code),
+            )
+
+            # Delete the progress record
+            conn.execute(
+                """
+                DELETE FROM course_progress
+                WHERE learner_id = ? AND course_code = ?
+                """,
+                (request.learner_id, request.course_code),
+            )
+
+        return request
+
+    def reject_cancellation(
+        self,
+        request_id: int,
+        instructor_id: int,
+        instructor_note: str = "",
+    ) -> CancellationRequest:
+        """
+        Reject a cancellation request (instructor action).
+
+        When rejected:
+            - The cancellation request status becomes REJECTED
+            - The enrollment continues as ENROLLED
+            - The learner can continue the course normally
+
+        Args:
+            request_id     : ID of the cancellation request.
+            instructor_id  : ID of the instructor rejecting.
+            instructor_note: Optional decision comment.
+
+        Returns:
+            CancellationRequest: Updated request object.
+
+        Raises:
+            LearnerNotFoundError: If request not found.
+        """
+        # ── Retrieve the cancellation request ──────────────────────────────
+        request = self._cancellation_request_repo.get_request(request_id)
+        if request is None:
+            raise LearnerNotFoundError(
+                f"Cancellation request {request_id} not found"
+            )
+
+        # ── Reject the request ─────────────────────────────────────────────
+        request.reject(instructor_id, instructor_note)
+        self._cancellation_request_repo.update_request(request)
+
+        return request
+
+    def get_learner_cancellation_requests(
+        self, learner_id: int
+    ) -> List[CancellationRequest]:
+        """
+        Get all cancellation requests for a learner.
+
+        Args:
+            learner_id: Learner's ID.
+
+        Returns:
+            List of CancellationRequest objects.
+        """
+        return self._cancellation_request_repo.get_requests_by_learner(
+            learner_id
+        )
+
+    def get_pending_cancellation_requests(
+        self,
+    ) -> List[CancellationRequest]:
+        """
+        Get all pending cancellation requests for instructor review.
+
+        Returns:
+            List of all PENDING CancellationRequest objects.
+        """
+        return self._cancellation_request_repo.get_pending_requests_for_instructor(
+            instructor_id=None
+        )
+
     def cancel_enrollment(
         self, learner_id: int, course_code: str
     ) -> None:
         """
-        Cancel a learner's enrollment in a course.
+        [DEPRECATED] Directly cancel an enrollment.
+
+        This method is kept for backward compatibility but should not be used.
+        Use request_cancellation() instead for the proper workflow.
 
         Args:
             learner_id  : Learner's ID.
@@ -273,6 +472,7 @@ class EnrollmentService:
 
         enrollment.cancel()
         self._enrollment_repo.update_enrollment(enrollment)
+
 
     def complete_enrollment(
         self,
@@ -631,6 +831,9 @@ def create_enrollment_service(database, graph: CourseGraph) -> "EnrollmentServic
         SQLiteEnrollmentRepository,
         SQLiteProgressRepository,
     )
+    from repository.cancellation_request_repo import (
+        SQLiteCancellationRequestRepository,
+    )
     from repository.learner_repo import SQLiteLearnerRepository
     from repository.course_repo import SQLiteCourseRepository
 
@@ -639,6 +842,7 @@ def create_enrollment_service(database, graph: CourseGraph) -> "EnrollmentServic
         progress_repo   = SQLiteProgressRepository(database),
         learner_repo    = SQLiteLearnerRepository(database),
         course_repo     = SQLiteCourseRepository(database),
+        cancellation_request_repo = SQLiteCancellationRequestRepository(database),
         graph           = graph,
         database        = database,
     )

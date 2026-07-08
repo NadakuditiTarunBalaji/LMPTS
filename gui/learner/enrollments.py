@@ -90,6 +90,7 @@ class EnrollmentsScreen(tk.Frame):
         self._tree.tag_configure("COMPLETED",   background="#e8f5e9")
         self._tree.tag_configure("IN_PROGRESS", background="#fff8e1")
         self._tree.tag_configure("CANCELLED",   background="#fce4ec")
+        self._tree.tag_configure("PENDING",     background="#fff3cd")
 
         # Actions
         btn_frame = tk.Frame(self, bg=CONTENT_BG, pady=10)
@@ -109,10 +110,11 @@ class EnrollmentsScreen(tk.Frame):
                 command=cmd,
             ).pack(side="left", padx=(0, 5))
 
-        self._all_enrollments = []
+        self._all_enrollments    = []
+        self._pending_by_course  = {}
 
     def _load_data(self):
-        """Load learner ID and all enrollments."""
+        """Load learner ID, enrollments, and pending cancellation requests."""
         try:
             learner_repo = self._services.get("learner_repo")
             if learner_repo:
@@ -132,6 +134,16 @@ class EnrollmentsScreen(tk.Frame):
                         self._learner_id
                     )
                 )
+
+                from core.enums import CancellationRequestStatus
+                requests = enrollment_svc.get_learner_cancellation_requests(
+                    self._learner_id
+                )
+                self._pending_by_course = {
+                    r.course_code: r for r in requests
+                    if r.status == CancellationRequestStatus.PENDING
+                }
+
             self._apply_filter()
         except Exception as e:
             show_error(self, "Error", str(e))
@@ -144,29 +156,34 @@ class EnrollmentsScreen(tk.Frame):
         filter_val = self._filter_var.get()
         filtered   = self._all_enrollments
 
+        from core.enums import EnrollmentStatus
+
         if filter_val == "ACTIVE":
-            from core.enums import EnrollmentStatus
             filtered = [
                 e for e in filtered
                 if e.status in (
                     EnrollmentStatus.ENROLLED,
                     EnrollmentStatus.IN_PROGRESS,
                 )
+                and e.course_code not in self._pending_by_course
             ]
         elif filter_val == "COMPLETED":
-            from core.enums import EnrollmentStatus
             filtered = [
                 e for e in filtered
                 if e.status == EnrollmentStatus.COMPLETED
             ]
         elif filter_val == "CANCELLED":
-            from core.enums import EnrollmentStatus
             filtered = [
                 e for e in filtered
                 if e.status == EnrollmentStatus.CANCELLED
+                or e.course_code in self._pending_by_course
             ]
 
         for e in filtered:
+            is_pending = e.course_code in self._pending_by_course
+            status_str = "Pending Approval" if is_pending else e.status.value
+            tag        = "PENDING" if is_pending else e.status.value
+
             score_str = f"{e.score:.0f}" if e.score is not None else "—"
             enrolled_str  = str(e.enrolled_at)[:10]  if e.enrolled_at  else "—"
             completed_str = str(e.completed_at)[:10] if e.completed_at else "—"
@@ -175,12 +192,12 @@ class EnrollmentsScreen(tk.Frame):
                 iid=str(e.id),
                 values=(
                     e.course_code,
-                    e.status.value,
+                    status_str,
                     score_str,
                     enrolled_str,
                     completed_str,
                 ),
-                tags=(e.status.value,),
+                tags=(tag,),
             )
 
     def _get_selected_enrollment(self):
@@ -236,14 +253,46 @@ class EnrollmentsScreen(tk.Frame):
         e = self._get_selected_enrollment()
         if e is None:
             return
-        if confirm(self, "Cancel Enrollment",
-                   f"Cancel enrollment in '{e.course_code}'?"):
+
+        if e.course_code in self._pending_by_course:
+            show_info(
+                self, "Already Pending",
+                f"A cancellation request for '{e.course_code}' "
+                f"is already pending instructor review."
+            )
+            return
+
+        # Check if already IN_PROGRESS or COMPLETED
+        from core.enums import EnrollmentStatus
+        if e.status != EnrollmentStatus.ENROLLED:
+            show_error(
+                self, "Cannot Cancel",
+                f"Can only request cancellation before starting the course. "
+                f"Current status: {e.status.value}"
+            )
+            return
+
+        if confirm(self, "Request Course Cancellation",
+                   f"Request cancellation of '{e.course_code}'?\n\n"
+                   f"The instructor will review your request."):
+            from tkinter import simpledialog
+            reason = simpledialog.askstring(
+                "Cancellation Reason",
+                "Why do you want to cancel this course? (optional):",
+                parent=self
+            )
+
             try:
                 enrollment_svc = self._services["enrollment_service"]
-                enrollment_svc.cancel_enrollment(
-                    self._learner_id, e.course_code
+                request = enrollment_svc.request_cancellation(
+                    self._learner_id, e.course_code,
+                    learner_note=reason or ""
                 )
-                show_info(self, "Cancelled", "Enrollment cancelled.")
+                show_info(
+                    self, "Request Submitted",
+                    f"Your cancellation request for '{e.course_code}' "
+                    f"has been submitted.\nThe instructor will review it shortly."
+                )
                 self._load_data()
             except Exception as ex:
                 show_error(self, "Error", str(ex))

@@ -279,3 +279,174 @@ class TestSystemOverview:
     ):
         overview = analytics_service.system_overview()
         assert overview["total_courses"] == 4
+
+
+class TestStudentPerformanceReport:
+
+    def test_empty(self, analytics_service, setup_curriculum):
+        assert analytics_service.student_performance_report() == []
+
+    def test_row_after_completion(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 95)
+
+        rows = analytics_service.student_performance_report()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["student_name"] == "Alice"
+        assert row["course_code"]  == "CS101"
+        assert row["score"]        == 95
+        assert row["grade"]        == "A"
+        assert row["status"]       == "COMPLETED"
+
+
+class TestScoreBucketDistribution:
+
+    def test_empty(self, analytics_service, setup_curriculum):
+        result = analytics_service.score_bucket_distribution()
+        assert result == {
+            "Excellent": 0, "Good": 0, "Average": 0, "Poor": 0, "total": 0
+        }
+
+    def test_bucket_after_completion(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 95)
+
+        result = analytics_service.score_bucket_distribution()
+        assert result["Excellent"] == 1
+        assert result["total"]     == 1
+
+
+class TestPerformanceTrend:
+
+    def test_empty_has_no_gaps(self, analytics_service, setup_curriculum):
+        result = analytics_service.performance_trend(months=3)
+        assert len(result) == 3
+        assert all(r["average_score"] is None for r in result)
+
+    def test_current_month_average(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 80)
+
+        result = analytics_service.performance_trend(months=3)
+        assert result[-1]["average_score"] == 80.0
+        assert result[-1]["completions"]   == 1
+
+
+class TestCourseCompletionBreakdown:
+
+    def test_empty(self, analytics_service, setup_curriculum):
+        result = analytics_service.course_completion_breakdown()
+        assert result["total"]           == 0
+        assert result["completion_rate"] == 0.0
+
+    def test_after_completion(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 80)
+
+        result = analytics_service.course_completion_breakdown()
+        assert result["completed"]       == 1
+        assert result["completion_rate"] == 100.0
+
+
+class TestCourseCompletionByCourse:
+
+    def test_empty(self, analytics_service, setup_curriculum):
+        result = analytics_service.course_completion_by_course()
+        assert result["labels"] == []
+
+    def test_after_completion(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 80)
+
+        result = analytics_service.course_completion_by_course()
+        assert "Intro" in result["labels"]
+        idx = result["labels"].index("Intro")
+        assert result["completed"][idx] == 1
+
+
+class TestEnrollmentMonthlyTrend:
+
+    def test_empty_has_no_gaps(self, analytics_service, setup_curriculum):
+        result = analytics_service.enrollment_monthly_trend(months=3)
+        assert len(result) == 3
+        assert all(r["count"] == 0 for r in result)
+
+    def test_current_month_count(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        result = analytics_service.enrollment_monthly_trend(months=3)
+        assert result[-1]["count"] == 1
+
+
+class TestEnrollmentSummaryMetrics:
+
+    def test_empty(self, analytics_service, setup_curriculum):
+        result = analytics_service.enrollment_summary_metrics()
+        assert result["total_enrollments"]   == 0
+        assert result["new_this_week"]       == 0
+        assert result["monthly_enrollments"] == 0
+        assert result["growth_rate"]         == 0.0
+
+    def test_after_enrollment(
+        self, analytics_service, enrollment_service,
+        setup_curriculum, setup_learner
+    ):
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        result = analytics_service.enrollment_summary_metrics()
+        assert result["total_enrollments"]   == 1
+        assert result["new_this_week"]       == 1
+        assert result["monthly_enrollments"] == 1
+        assert result["growth_rate"]         == 100.0
+
+
+class TestInstructorAnalytics:
+
+    def test_empty_instructors(self, analytics_service):
+        assert analytics_service.instructor_analytics([], {}) == []
+
+    def test_instructor_with_no_courses(self, analytics_service, repos, pm):
+        instructor = repos["user"].create_user(
+            User("bob", pm.hash_password("pass1234"), UserRole.INSTRUCTOR)
+        )
+        result = analytics_service.instructor_analytics([instructor], {})
+        assert len(result) == 1
+        assert result[0]["courses_created"]   == 0
+        assert result[0]["students_assigned"] == 0
+        assert result[0]["completion_rate"]   == 0.0
+        assert result[0]["average_rating"]    == "N/A"
+
+    def test_instructor_with_courses_and_students(
+        self, analytics_service, enrollment_service, repos, pm,
+        setup_curriculum, setup_learner
+    ):
+        instructor = repos["user"].create_user(
+            User("bob", pm.hash_password("pass1234"), UserRole.INSTRUCTOR)
+        )
+        enrollment_service.enroll_learner(setup_learner.id, "CS101")
+        enrollment_service.complete_enrollment(setup_learner.id, "CS101", 80)
+
+        result = analytics_service.instructor_analytics(
+            [instructor], {instructor.id: {"CS101"}}
+        )
+        assert result[0]["courses_created"]   == 1
+        assert result[0]["students_assigned"] == 1
+        assert result[0]["completion_rate"]   == 100.0
+        assert result[0]["average_rating"]    == "N/A"

@@ -45,12 +45,16 @@ def graph():
 
 @pytest.fixture
 def repos(db):
+    from repository.cancellation_request_repo import (
+        SQLiteCancellationRequestRepository,
+    )
     return {
-        "user":       SQLiteUserRepository(db),
-        "course":     SQLiteCourseRepository(db),
-        "learner":    SQLiteLearnerRepository(db),
-        "enrollment": SQLiteEnrollmentRepository(db),
-        "progress":   SQLiteProgressRepository(db),
+        "user":                  SQLiteUserRepository(db),
+        "course":                SQLiteCourseRepository(db),
+        "learner":               SQLiteLearnerRepository(db),
+        "enrollment":            SQLiteEnrollmentRepository(db),
+        "progress":              SQLiteProgressRepository(db),
+        "cancellation_request":  SQLiteCancellationRequestRepository(db),
     }
 
 
@@ -66,6 +70,7 @@ def enrollment_service(repos, graph, db):
         progress_repo   = repos["progress"],
         learner_repo    = repos["learner"],
         course_repo     = repos["course"],
+        cancellation_request_repo = repos["cancellation_request"],
         graph           = graph,
         database        = db,
     )
@@ -249,11 +254,119 @@ class TestCompleteEnrollment:
             )
 
 
-class TestCancelEnrollment:
+class TestCancellationRequest:
 
-    def test_cancel_enrollment(
+    def test_request_cancellation_success(
         self, enrollment_service, repos, saved_learner, saved_course
     ):
+        """Learner can request cancellation of ENROLLED course."""
+        enrollment_service.enroll_learner(saved_learner.id, "CS101")
+
+        request = enrollment_service.request_cancellation(
+            saved_learner.id, "CS101", learner_note="Need to focus on other courses"
+        )
+
+        assert request.status.value == "PENDING"
+        assert request.learner_id == saved_learner.id
+        assert request.course_code == "CS101"
+        assert request.learner_note == "Need to focus on other courses"
+
+        # Enrollment should still exist and be ENROLLED
+        enrollment = repos["enrollment"].get_enrollment_by_learner_course(
+            saved_learner.id, "CS101"
+        )
+        assert enrollment.status == EnrollmentStatus.ENROLLED
+
+    def test_request_cancellation_not_enrolled_raises(
+        self, enrollment_service, saved_learner, saved_course
+    ):
+        """Cannot request cancellation if not enrolled."""
+        with pytest.raises(LearnerNotFoundError):
+            enrollment_service.request_cancellation(
+                saved_learner.id, "CS101"
+            )
+
+    def test_request_cancellation_after_start_raises(
+        self, enrollment_service, saved_learner, saved_course
+    ):
+        """Cannot request cancellation after starting course."""
+        enrollment_service.enroll_learner(saved_learner.id, "CS101")
+        enrollment_service.start_enrollment(saved_learner.id, "CS101")
+
+        from core.exceptions import EnrollmentError
+        with pytest.raises(EnrollmentError, match="Cannot request cancellation"):
+            enrollment_service.request_cancellation(
+                saved_learner.id, "CS101"
+            )
+
+    def test_approve_cancellation_deletes_enrollment(
+        self, enrollment_service, repos, saved_learner, saved_course
+    ):
+        """Approving cancellation deletes enrollment and allows re-enrollment."""
+        from core.enums import CancellationRequestStatus
+        
+        # Enroll
+        enrollment_service.enroll_learner(saved_learner.id, "CS101")
+
+        # Request cancellation
+        request = enrollment_service.request_cancellation(
+            saved_learner.id, "CS101"
+        )
+        request_id = request.id
+
+        # Approve cancellation
+        approved_request = enrollment_service.approve_cancellation(
+            request_id, instructor_id=1, instructor_note="Approved"
+        )
+
+        assert approved_request.status == CancellationRequestStatus.APPROVED
+        assert approved_request.instructor_id == 1
+        assert approved_request.instructor_note == "Approved"
+
+        # Enrollment should be deleted
+        enrollments = repos["enrollment"].get_enrollments_by_learner(
+            saved_learner.id
+        )
+        assert len(enrollments) == 0
+
+        # Learner should be able to re-enroll
+        result = enrollment_service.enroll_learner(saved_learner.id, "CS101")
+        assert result.success is True
+        assert result.enrollment.status == EnrollmentStatus.ENROLLED
+
+    def test_reject_cancellation_keeps_enrollment(
+        self, enrollment_service, repos, saved_learner, saved_course
+    ):
+        """Rejecting cancellation keeps enrollment as ENROLLED."""
+        from core.enums import CancellationRequestStatus
+        
+        # Enroll
+        enrollment_service.enroll_learner(saved_learner.id, "CS101")
+
+        # Request cancellation
+        request = enrollment_service.request_cancellation(
+            saved_learner.id, "CS101"
+        )
+        request_id = request.id
+
+        # Reject cancellation
+        rejected_request = enrollment_service.reject_cancellation(
+            request_id, instructor_id=1, instructor_note="Please complete the course"
+        )
+
+        assert rejected_request.status == CancellationRequestStatus.REJECTED
+        assert rejected_request.instructor_id == 1
+
+        # Enrollment should still exist and be ENROLLED
+        enrollment = repos["enrollment"].get_enrollment_by_learner_course(
+            saved_learner.id, "CS101"
+        )
+        assert enrollment.status == EnrollmentStatus.ENROLLED
+
+    def test_cancel_enrollment_deprecated(
+        self, enrollment_service, repos, saved_learner, saved_course
+    ):
+        """Deprecated cancel_enrollment method still works for backward compatibility."""
         enrollment_service.enroll_learner(saved_learner.id, "CS101")
         enrollment_service.cancel_enrollment(saved_learner.id, "CS101")
 
@@ -269,6 +382,7 @@ class TestCancelEnrollment:
             enrollment_service.cancel_enrollment(
                 saved_learner.id, "CS101"
             )
+
 
 
 class TestTransferAndExemption:

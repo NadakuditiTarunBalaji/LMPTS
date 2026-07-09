@@ -144,6 +144,16 @@ class EnrollmentRepositoryInterface(ABC):
     def count_by_course(self, course_code: str) -> int:
         """Total enrollments for a course."""
 
+    @abstractmethod
+    def get_all_enrollments(self) -> List[Enrollment]:
+        """
+        All enrollments in the system, across every learner and course.
+
+        Used by analytics for system-wide reporting (student performance,
+        score distributions, enrollment trend charts) where per-course or
+        per-learner queries would require looping every course/learner.
+        """
+
 
 # ── Progress Abstract Interface ────────────────────────────────────────────────
 
@@ -172,6 +182,10 @@ class ProgressRepositoryInterface(ABC):
         learner_id: int
     ) -> List[CourseProgress]:
         """All progress records for a learner."""
+
+    @abstractmethod
+    def get_all_progress(self) -> List[CourseProgress]:
+        """All course_progress rows in the system, across every learner and course."""
 
     @abstractmethod
     def update_progress(self, progress: CourseProgress) -> None:
@@ -420,6 +434,20 @@ class SQLiteEnrollmentRepository(EnrollmentRepositoryInterface):
         finally:
             conn.close()
 
+    def get_all_enrollments(self) -> List[Enrollment]:
+        """All enrollments in the system, ordered by enrolled_at (oldest first)."""
+        conn = self._db.get_connection()
+        try:
+            cursor = conn.execute(
+                "SELECT * FROM enrollments ORDER BY enrolled_at ASC"
+            )
+            return [
+                self._row_to_enrollment(row)
+                for row in cursor.fetchall()
+            ]
+        finally:
+            conn.close()
+
     # ── Update ─────────────────────────────────────────────────────────────────
 
     def update_enrollment(self, enrollment: Enrollment) -> None:
@@ -582,6 +610,18 @@ class SQLiteProgressRepository(ProgressRepositoryInterface):
                 """,
                 (learner_id,)
             )
+            return [
+                self._row_to_progress(row)
+                for row in cursor.fetchall()
+            ]
+        finally:
+            conn.close()
+
+    def get_all_progress(self) -> List[CourseProgress]:
+        """All course_progress records in the system."""
+        conn = self._db.get_connection()
+        try:
+            cursor = conn.execute("SELECT * FROM course_progress")
             return [
                 self._row_to_progress(row)
                 for row in cursor.fetchall()

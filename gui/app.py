@@ -27,7 +27,7 @@ def create_services(database) -> dict:
         PriorLearningRepository,
         NotificationRepository,
     )
-    
+    from repository.cancellation_request_repo import SQLiteCancellationRequestRepository
     from auth.auth_service import AuthService
     from algorithms.graph import CourseGraph
     from services.course_service import CourseService
@@ -48,6 +48,7 @@ def create_services(database) -> dict:
     progress_repo   = SQLiteProgressRepository(database)
     plr_repo        = PriorLearningRepository(database)
     notif_repo      = NotificationRepository(database)
+    cancellation_request_repo = SQLiteCancellationRequestRepository(database)
 
     graph = CourseGraph()
 
@@ -59,12 +60,13 @@ def create_services(database) -> dict:
     )
 
     enrollment_service = EnrollmentService(
-        enrollment_repo=enrollment_repo,
-        progress_repo=progress_repo,
-        learner_repo=learner_repo,
-        course_repo=course_repo,
-        graph=graph,
-        database=database,
+        enrollment_repo = enrollment_repo,
+        progress_repo   = progress_repo,
+        learner_repo    = learner_repo,
+        course_repo     = course_repo,
+        cancellation_request_repo = cancellation_request_repo,
+        graph           = graph,
+        database        = database,
     )
 
     progress_service = ProgressService(

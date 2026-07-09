@@ -163,11 +163,13 @@ class MainWindow(tk.Tk):
 
         elif role == UserRole.INSTRUCTOR:
             return [
-                ("Dashboard",             self._show_instructor_dashboard),
-                ("My Courses",            self._show_instructor_courses),
-                ("Monitor Learners",      self._show_learner_monitor),
-                ("Prior Learning Review", self._show_plr_review),
-                ("My Profile",            self._show_profile),     # NEW
+                ("Dashboard",                     self._show_instructor_dashboard),
+                ("My Courses",                    self._show_instructor_courses),
+                ("Monitor Learners",              self._show_learner_monitor),
+                ("Prior Learning Review",         self._show_plr_review),
+                ("Review Cancellation Requests",  self._show_cancellation_review),
+                ("Course Reports",                self._show_course_reports),
+                ("My Profile",                    self._show_profile),
             ]
         return []
     # Add this method to MainWindow:
@@ -385,6 +387,13 @@ class MainWindow(tk.Tk):
         self._clear_content()
         from gui.instructor.plr_review import PLRReviewScreen
         PLRReviewScreen(
+            self._content_frame, self._user, self._services
+        ).pack(fill="both", expand=True)
+
+    def _show_cancellation_review(self):
+        self._clear_content()
+        from gui.instructor.cancellation_review import CancellationReviewScreen
+        CancellationReviewScreen(
             self._content_frame, self._user, self._services
         ).pack(fill="both", expand=True)
 

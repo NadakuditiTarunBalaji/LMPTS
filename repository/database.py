@@ -174,6 +174,25 @@ CREATE TABLE IF NOT EXISTS course_submissions (
 )
 """
 
+SQL_CREATE_CANCELLATION_REQUESTS = """
+CREATE TABLE IF NOT EXISTS cancellation_requests (
+    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+    learner_id                  INTEGER NOT NULL,
+    course_code                 TEXT    NOT NULL,
+    status                      TEXT    NOT NULL DEFAULT 'PENDING',
+    learner_note                TEXT    DEFAULT '',
+    instructor_note             TEXT,
+    instructor_id               INTEGER,
+    submitted_at                TEXT    NOT NULL,
+    reviewed_by_instructor_at   TEXT,
+    UNIQUE (learner_id, course_code, status),
+    FOREIGN KEY (learner_id)
+        REFERENCES learners(id) ON DELETE CASCADE,
+    FOREIGN KEY (course_code)
+        REFERENCES courses(code) ON DELETE CASCADE
+)
+"""
+
 SQL_CREATE_NOTIFICATIONS = """
 CREATE TABLE IF NOT EXISTS notifications (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,6 +216,7 @@ ALL_TABLE_SQLS = [
     SQL_CREATE_COURSE_PROGRESS,
     SQL_CREATE_PRIOR_LEARNING_REQUESTS,   # NEW
     SQL_CREATE_COURSE_SUBMISSIONS,         # NEW
+    SQL_CREATE_CANCELLATION_REQUESTS,      # NEW
     SQL_CREATE_NOTIFICATIONS,              # NEW
 ]
 
@@ -208,6 +228,10 @@ ALL_TABLE_NAMES = [
     "prerequisites",
     "enrollments",
     "course_progress",
+    "prior_learning_requests",
+    "course_submissions",
+    "cancellation_requests",
+    "notifications",
 ]
 
 

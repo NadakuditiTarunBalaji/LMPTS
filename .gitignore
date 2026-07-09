@@ -96,3 +96,8 @@ coverage_reports/
 secret.key
 secrets/
 config.local.py
+
+data/lmpts.db-wal
+data/lmpts.db-shm
+*.db-wal
+*.db-shm

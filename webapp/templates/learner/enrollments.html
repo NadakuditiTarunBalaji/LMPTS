@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}My Courses — LMPTS{% endblock %}
+{% block content %}
+<h1>My Courses</h1>
+
+<div class="tabs">
+  {% for s in ["ALL", "ENROLLED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] %}
+  <a href="{{ url_for('learner.enrollments', status=s) }}" class="{% if status_filter == s %}active{% endif %}">{{ s.replace('_', ' ').title() }}</a>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  {% if enrollments %}
+  <table>
+    <tr><th>Course</th><th>Status</th><th>Score</th><th>Actions</th></tr>
+    {% for e in enrollments %}
+    <tr>
+      <td>{{ e.course_code }}</td>
+      <td><span class="badge {{ 'ok' if e.status.value == 'COMPLETED' else ('neutral' if e.status.value == 'CANCELLED' else 'warn') }}">{{ e.status.value }}</span></td>
+      <td>{{ e.score if e.score is not none else "—" }}</td>
+      <td>
+        {% if e.status.value == 'ENROLLED' %}
+        <form method="post" action="{{ url_for('learner.start_enrollment', code=e.course_code) }}" class="inline">
+          <button type="submit" class="btn small">Start</button>
+        </form>
+        {% endif %}
+        {% if e.status.value in ['ENROLLED', 'IN_PROGRESS'] %}
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Complete</summary>
+          <form method="post" action="{{ url_for('learner.complete_enrollment', code=e.course_code) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Score (0-100)</label><input type="number" name="score" min="0" max="100" step="0.1" required></div>
+            <button type="submit" class="btn small">Save</button>
+          </form>
+        </details>
+        <form method="post" action="{{ url_for('learner.cancel_enrollment', code=e.course_code) }}" class="inline" onsubmit="return confirm('Cancel this enrollment?');">
+          <button type="submit" class="btn small danger">Cancel</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No enrollments in this category.</p>
+  {% endif %}
+</div>
+{% endblock %}

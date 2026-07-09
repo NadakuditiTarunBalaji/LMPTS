@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Prerequisites — LMPTS{% endblock %}
+{% block content %}
+<h1>Prerequisite Management</h1>
+
+<div class="panel">
+  <h2>Select a course</h2>
+  <form method="get">
+    <div class="form-group">
+      <select name="course" onchange="this.form.submit()">
+        <option value="">— Select —</option>
+        {% for c in courses %}
+        <option value="{{ c.code }}" {% if c.code == selected_code %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+{% if selected_code %}
+<div class="panel">
+  <h2>Prerequisites for {{ selected_code }}</h2>
+  {% if prereqs %}
+  <table>
+    <tr><th>Course</th><th>Actions</th></tr>
+    {% for p in prereqs %}
+    <tr>
+      <td>{{ p }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin.remove_prerequisite') }}" class="inline">
+          <input type="hidden" name="course_code" value="{{ selected_code }}">
+          <input type="hidden" name="prereq_code" value="{{ p }}">
+          <button type="submit" class="btn small danger">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No prerequisites set.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('admin.add_prerequisite') }}" style="margin-top:16px;">
+    <input type="hidden" name="course_code" value="{{ selected_code }}">
+    <div class="form-group">
+      <label>Add prerequisite</label>
+      <select name="prereq_code">
+        {% for c in courses if c.code != selected_code %}
+        <option value="{{ c.code }}">{{ c.code }} — {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn">Add prerequisite</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Study order (topological levels)</h2>
+  {% for level in levels %}
+  <p><strong>Level {{ loop.index }}:</strong> {{ level|join(", ") }}</p>
+  {% endfor %}
+</div>
+{% endblock %}

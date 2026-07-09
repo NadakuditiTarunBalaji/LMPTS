@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — LMPTS{% endblock %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+
+<div class="stat-cards">
+  <div class="stat-card"><div class="value">{{ overview.total_courses }}</div><div class="label">Total Courses</div></div>
+  <div class="stat-card"><div class="value">{{ overview.total_learners }}</div><div class="label">Total Learners</div></div>
+  <div class="stat-card"><div class="value">{{ overview.total_enrollments }}</div><div class="label">Total Enrollments</div></div>
+  <div class="stat-card"><div class="value">{{ "%.1f"|format(overview.overall_completion_rate) }}%</div><div class="label">Completion Rate</div></div>
+  <div class="stat-card"><div class="value">{{ pending_count }}</div><div class="label">Pending Registrations</div></div>
+</div>
+
+<div class="panel">
+  <h2>Difficulty Distribution</h2>
+  <table>
+    <tr><th>Beginner</th><th>Intermediate</th><th>Advanced</th><th>Total</th></tr>
+    <tr>
+      <td>{{ overview.difficulty_distribution.BEGINNER }}</td>
+      <td>{{ overview.difficulty_distribution.INTERMEDIATE }}</td>
+      <td>{{ overview.difficulty_distribution.ADVANCED }}</td>
+      <td>{{ overview.difficulty_distribution.total }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Learner Activity (top 10)</h2>
+  {% if activity %}
+  <table>
+    <tr><th>Learner</th><th>Enrolled</th><th>Completed</th><th>In Progress</th><th>Completion Rate</th><th>Avg Score</th></tr>
+    {% for row in activity %}
+    <tr>
+      <td>{{ row.learner_name }}</td>
+      <td>{{ row.total_enrolled }}</td>
+      <td>{{ row.completed }}</td>
+      <td>{{ row.in_progress }}</td>
+      <td>{{ "%.1f"|format(row.completion_rate) }}%</td>
+      <td>{{ "%.1f"|format(row.average_score) if row.average_score is not none else "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No learner activity yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

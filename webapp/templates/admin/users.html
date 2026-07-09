@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Users — LMPTS{% endblock %}
+{% block content %}
+<h1>Users</h1>
+
+<div class="panel">
+  <h2>Create user</h2>
+  <form method="post" action="{{ url_for('admin.create_user') }}">
+    <div class="grid-2">
+      <div class="form-group"><label>Username</label><input type="text" name="username" required></div>
+      <div class="form-group"><label>Password</label><input type="password" name="password" minlength="8" required></div>
+    </div>
+    <div class="form-group">
+      <label>Role</label>
+      <select name="role">
+        {% for r in roles %}<option value="{{ r.name }}">{{ r.value }}</option>{% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn">Create user</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>All users</h2>
+  <table>
+    <tr><th>ID</th><th>Username</th><th>Role</th><th>Created</th><th>Actions</th></tr>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.id }}</td>
+      <td>{{ user.username }}</td>
+      <td>{{ user.role.value }}</td>
+      <td>{{ user.created_at }}</td>
+      <td>
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Reset password</summary>
+          <form method="post" action="{{ url_for('admin.admin_change_password', user_id=user.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>New password</label><input type="password" name="new_password" minlength="8" required></div>
+            <button type="submit" class="btn small">Set password</button>
+          </form>
+        </details>
+        <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" class="inline" onsubmit="return confirm('Permanently delete this user?');">
+          <button type="submit" class="btn small danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

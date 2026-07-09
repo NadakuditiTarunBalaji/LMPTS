@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Bottlenecks — LMPTS{% endblock %}
+{% block content %}
+<h1>Bottleneck Courses</h1>
+
+<div class="panel">
+  <form method="get">
+    <div class="form-group">
+      <label>Dropout threshold (%)</label>
+      <input type="number" name="threshold" value="{{ threshold }}" min="0" max="100" step="1" onchange="this.form.submit()">
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  {% if bottlenecks %}
+  <table>
+    <tr><th>Course</th><th>Dropout Rate</th><th>Total Enrolled</th><th>Completed</th></tr>
+    {% for b in bottlenecks %}
+    <tr>
+      <td>{{ b.course_code }} — {{ b.course_name }}</td>
+      <td>{{ "%.1f"|format(b.dropout_rate) }}%</td>
+      <td>{{ b.total_enrolled }}</td>
+      <td>{{ b.completed }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No courses above this dropout threshold.</p>
+  {% endif %}
+</div>
+{% endblock %}

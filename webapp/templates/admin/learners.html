@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Learners — LMPTS{% endblock %}
+{% block content %}
+<h1>Learner Management</h1>
+
+<div class="panel">
+  <h2>Add learner</h2>
+  <form method="post" action="{{ url_for('admin.create_learner') }}">
+    <div class="grid-2">
+      <div class="form-group"><label>Username</label><input type="text" name="username" required></div>
+      <div class="form-group"><label>Password</label><input type="password" name="password" minlength="8" required></div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group"><label>Full name</label><input type="text" name="name" required></div>
+      <div class="form-group"><label>Email</label><input type="email" name="email" required></div>
+    </div>
+    <button type="submit" class="btn">Create learner</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>All learners</h2>
+  {% if rows %}
+  <table>
+    <tr><th>Name</th><th>Email</th><th>Enrolled</th><th>Completed</th><th>Completion Rate</th><th>Actions</th></tr>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.learner.name }}</td>
+      <td>{{ row.learner.email }}</td>
+      <td>{{ row.summary.total_enrolled }}</td>
+      <td>{{ row.summary.completed }}</td>
+      <td>{{ "%.1f"|format(row.summary.completion_rate) }}%</td>
+      <td>
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Transfer credit</summary>
+          <form method="post" action="{{ url_for('admin.transfer_credit', learner_id=row.learner.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Course code</label><input type="text" name="course_code" required></div>
+            <div class="form-group"><label>Note</label><input type="text" name="note"></div>
+            <button type="submit" class="btn small">Grant</button>
+          </form>
+        </details>
+        <details style="display:inline-block;">
+          <summary class="btn small secondary">Approve exemption</summary>
+          <form method="post" action="{{ url_for('admin.approve_exemption', learner_id=row.learner.id) }}" style="margin-top:8px;">
+            <div class="form-group"><label>Course code</label><input type="text" name="course_code" required></div>
+            <div class="form-group"><label>Note</label><input type="text" name="note"></div>
+            <button type="submit" class="btn small">Approve</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No learners yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

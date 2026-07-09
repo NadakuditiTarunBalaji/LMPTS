@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Prior Learning Approval — LMPTS{% endblock %}
+{% block content %}
+<h1>Prior Learning Approval</h1>
+
+<div class="tabs">
+  <a href="{{ url_for('admin.plr', filter='awaiting') }}" class="{% if filter_ == 'awaiting' %}active{% endif %}">Awaiting My Decision</a>
+  <a href="{{ url_for('admin.plr', filter='all') }}" class="{% if filter_ == 'all' %}active{% endif %}">All</a>
+</div>
+
+<div class="panel">
+  {% if requests %}
+  <table>
+    <tr><th>Learner</th><th>Course</th><th>Pathway</th><th>Instructor rec.</th><th>Status</th><th>Actions</th></tr>
+    {% for r in requests %}
+    <tr>
+      <td>{{ r.learner_name }}</td>
+      <td>{{ r.course_code }}</td>
+      <td>{{ r.pathway }}</td>
+      <td>
+        {{ r.instructor_recommendation or "—" }}
+        {% if r.instructor_note %}<br><span style="color:var(--muted); font-size:0.82rem;">{{ r.instructor_note }}</span>{% endif %}
+      </td>
+      <td><span class="badge {{ 'ok' if r.status == 'APPROVED' else ('bad' if r.status == 'REJECTED' else 'warn') }}">{{ r.status }}</span></td>
+      <td>
+        {% if r.status == 'INSTRUCTOR_REVIEWED' or r.status == 'PENDING' %}
+        <details style="display:inline-block; min-width:260px;">
+          <summary class="btn small">Decide</summary>
+          <form method="post" action="{{ url_for('admin.plr_decide', request_id=r.id) }}" style="margin-top:8px;">
+            <div class="form-group">
+              <label><input type="radio" name="decision" value="APPROVE" required> Approve</label>
+              <label><input type="radio" name="decision" value="REJECT"> Reject</label>
+            </div>
+            <div class="form-group"><label>Decision note (required)</label><textarea name="note" required></textarea></div>
+            <button type="submit" class="btn small">Submit decision</button>
+          </form>
+        </details>
+        {% else %}
+        <span style="color:var(--muted);">{{ r.admin_note or "—" }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr><td colspan="6" style="font-size:0.85rem; color:var(--muted);">Evidence: {{ r.evidence_description }}{% if r.external_platform %} &middot; Platform: {{ r.external_platform }}{% endif %}{% if r.external_score is not none %} &middot; Score: {{ r.external_score }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No requests.</p>
+  {% endif %}
+</div>
+{% endblock %}

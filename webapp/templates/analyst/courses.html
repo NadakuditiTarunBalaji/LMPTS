@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Reports — LMPTS{% endblock %}
+{% block content %}
+<h1>Course Completion Reports</h1>
+
+<div class="panel">
+  {% if rows %}
+  <table>
+    <tr><th>Course</th><th>Enrolled</th><th>Completed</th><th>In Progress</th><th>Cancelled</th><th>Completion Rate</th><th>Dropout Rate</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.course_code }} — {{ r.course_name }}</td>
+      <td>{{ r.total_enrolled }}</td>
+      <td>{{ r.completed }}</td>
+      <td>{{ r.in_progress }}</td>
+      <td>{{ r.cancelled }}</td>
+      <td>{{ "%.1f"|format(r.completion_rate) }}%</td>
+      <td>{{ "%.1f"|format(r.dropout_rate) }}%</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="empty-state">No course data yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

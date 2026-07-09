@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Progress — LMPTS{% endblock %}
+{% block content %}
+<h1>My Progress</h1>
+
+<div class="stat-cards">
+  <div class="stat-card"><div class="value">{{ summary.total_enrolled }}</div><div class="label">Enrolled</div></div>
+  <div class="stat-card"><div class="value">{{ summary.completed }}</div><div class="label">Completed</div></div>
+  <div class="stat-card"><div class="value">{{ summary.in_progress }}</div><div class="label">In Progress</div></div>
+  <div class="stat-card"><div class="value">{{ "%.1f"|format(summary.completion_rate) }}%</div><div class="label">Completion Rate</div></div>
+</div>
+
+<div class="panel">
+  <h2>Per-course progress</h2>
+  {% if course_progress %}
+  {% for p in course_progress %}
+  <div style="margin-bottom:14px;">
+    <div style="display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:4px;">
+      <span>{{ p.course_code }}</span>
+      <span>{{ p.completion_status.value }} — {{ "%.0f"|format(p.percentage) }}%</span>
+    </div>
+    <div class="progress-bar"><div class="fill" style="width: {{ p.percentage }}%"></div></div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="empty-state">No progress recorded yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

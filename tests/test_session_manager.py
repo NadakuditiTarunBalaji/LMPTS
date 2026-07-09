@@ -50,7 +50,7 @@ try:
     s1.login(None)
     print('FAILED - should have raised')
 except ValueError as e:
-    print(f'login(None) raises ValueError: PASSED')
+print(f'login(None) raises ValueError: PASSED')
 
 # repr
 print(f'repr: {repr(s1)}')

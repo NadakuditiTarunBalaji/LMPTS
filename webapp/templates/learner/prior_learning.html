@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Prior Learning — LMPTS{% endblock %}
+{% block content %}
+<h1>Prior Learning Credit</h1>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Submit new request</h2>
+    <form method="post" action="{{ url_for('learner.submit_prior_learning') }}">
+      <div class="form-group">
+        <label>Course</label>
+        <select name="course_code" required>
+          {% for c in courses %}<option value="{{ c.code }}">{{ c.code }} — {{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Pathway</label>
+        <label><input type="radio" name="pathway" value="TRANSFER" required> Transfer Credit</label>
+        <label><input type="radio" name="pathway" value="ASSESSMENT"> Prior Assessment</label>
+        <label><input type="radio" name="pathway" value="EXEMPTION"> Exemption Request</label>
+      </div>
+      <div class="form-group"><label>External platform/institution</label><input type="text" name="external_platform"></div>
+      <div class="form-group"><label>External score (0-100, optional)</label><input type="number" name="external_score" min="0" max="100" step="0.1"></div>
+      <div class="form-group"><label>Evidence description (min 30 chars)</label><textarea name="evidence_description" minlength="30" rows="4" required></textarea></div>
+      <button type="submit" class="btn">Submit request</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>My requests</h2>
+    {% if requests %}
+    <table>
+      <tr><th>Course</th><th>Pathway</th><th>Status</th></tr>
+      {% for r in requests %}
+      <tr>
+        <td>{{ r.course_code }}</td>
+        <td>{{ r.pathway }}</td>
+        <td><span class="badge {{ 'ok' if r.status == 'APPROVED' else ('bad' if r.status == 'REJECTED' else 'warn') }}">{{ r.status }}</span></td>
+      </tr>
+      {% if r.instructor_note or r.admin_note %}
+      <tr><td colspan="3" style="font-size:0.82rem; color:var(--muted);">
+        {% if r.instructor_note %}Instructor: {{ r.instructor_note }}<br>{% endif %}
+        {% if r.admin_note %}Admin: {{ r.admin_note }}{% endif %}
+      </td></tr>
+      {% endif %}
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="empty-state">No requests submitted yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

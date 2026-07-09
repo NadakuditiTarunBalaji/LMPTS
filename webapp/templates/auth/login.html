@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Log in — LMPTS{% endblock %}
+{% block guest_content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <h1>LMPTS</h1>
+    <p class="subtitle">Learning Management &amp; Prerequisite Tracking System</p>
+    <form method="post">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <button type="submit" class="btn" style="width:100%">Log in</button>
+    </form>
+    <p class="footer-link">No account? <a href="{{ url_for('auth.register') }}">Register as a learner</a></p>
+  </div>
+</div>
+{% endblock %}

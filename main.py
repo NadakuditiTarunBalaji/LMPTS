@@ -99,7 +99,6 @@ def main():
        "PY101" in learner.external_completed_courses:
 
         print("✅ Eligible to Enroll in PY102")
-
     else:
 
         print("❌ Complete PY101 First")

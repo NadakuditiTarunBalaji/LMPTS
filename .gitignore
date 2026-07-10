@@ -14,7 +14,7 @@ venv/
 .venv/
 env/
 ENV/
-
+webapp/learner.py
 # =========================================
 # Distribution / Packaging
 # =========================================
@@ -22,7 +22,7 @@ build/
 dist/
 *.egg-info/
 .eggs/
-
+webapp/static/js/chart.umd.min.js
 # =========================================
 # Testing
 # =========================================

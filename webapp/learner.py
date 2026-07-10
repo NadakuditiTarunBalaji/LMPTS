@@ -152,13 +152,38 @@ def submit_prior_learning():
 
 # ── Recommendations ───────────────────────────────────────────────────────────
 
+# @learner_bp.route("/recommendations")
+# def recommendations():
+#     svc = services()
+#     difficulty = request.args.get("difficulty", "BEGINNER")
+#     try:
+#         recs = svc["recommendation_service"].get_recommendations(g.learner_id, difficulty_preference=difficulty)
+#     except LearnerNotFoundError as e:
+#         flash(str(e), "error")
+#         recs = []
+#     return render_template("learner/recommendations.html", recommendations=recs, difficulty=difficulty)
 @learner_bp.route("/recommendations")
 def recommendations():
     svc = services()
     difficulty = request.args.get("difficulty", "BEGINNER")
+
+    print(f"[DEBUG] difficulty from URL = {repr(difficulty)}")
+
     try:
-        recs = svc["recommendation_service"].get_recommendations(g.learner_id, difficulty_preference=difficulty)
+        recs = svc["recommendation_service"].get_recommendations(
+            g.learner_id,
+            difficulty_preference=difficulty,
+        )
     except LearnerNotFoundError as e:
         flash(str(e), "error")
         recs = []
-    return render_template("learner/recommendations.html", recommendations=recs, difficulty=difficulty)
+
+    print(f"[DEBUG] returned {len(recs)} recommendations")
+    for r in recs:
+        print(f"    {r['course_code']} — score {r['score']}")
+
+    return render_template(
+        "learner/recommendations.html",
+        recommendations=recs,
+        difficulty=difficulty,
+    )

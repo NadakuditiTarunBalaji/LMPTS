@@ -106,14 +106,50 @@ def users():
 
 @admin_bp.route("/users/create", methods=["POST"])
 def create_user():
+    """
+    Create a new user account.
+
+    If role is LEARNER, also creates a Learner profile so the user
+    can access the learner dashboard immediately.
+    """
+    svc = services()
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    role = UserRole[request.form.get("role", "LEARNER")]
+    role_str = request.form.get("role", "LEARNER")
+
+    # ── Validate role ─────────────────────────────────────────────────────────
     try:
-        services()["auth_service"].register(username, password, role)
-        flash(f"User '{username}' created.", "success")
+        role = UserRole[role_str]
+    except KeyError:
+        flash(f"Invalid role: {role_str}", "error")
+        return redirect(url_for("admin.users"))
+
+    try:
+        # ── Step 1: Create the user account (ACTIVE by default) ───────────────
+        new_user = svc["auth_service"].register(username, password, role)
+
+        # ── Step 2: If LEARNER, create the linked Learner profile ─────────────
+        # Without this, /learner/* returns 403 because
+        # current_learner_id() returns None.
+        if role == UserRole.LEARNER:
+            svc["learner_repo"].create_learner(Learner(
+                name=username,                    # placeholder — user can edit
+                email=f"{username}@lmpts.edu",    # placeholder — user can edit
+                user_id=new_user.id,
+            ))
+            flash(
+                f"Learner '{username}' created with account and profile.",
+                "success",
+            )
+        else:
+            flash(f"User '{username}' created as {role.value}.", "success")
+
     except ValidationError as e:
         flash(str(e), "error")
+    except Exception as e:
+        flash(f"Failed to create user: {e}", "error")
+
     return redirect(url_for("admin.users"))
 
 
@@ -277,37 +313,65 @@ def approve_course_submission(submission_id):
         flash(str(e), "error")
     return redirect(url_for("admin.course_approvals"))
 
-
 @admin_bp.route("/course-approvals/<int:submission_id>/reject", methods=["POST"])
 def reject_course_submission(submission_id):
     note = request.form.get("note", "").strip()
     svc = services()
     db = svc["database"]
+
     with db.get_connection() as conn:
-        row = conn.execute("SELECT * FROM course_submissions WHERE id = ?", (submission_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM course_submissions WHERE id = ?",
+            (submission_id,),
+        ).fetchone()
+
     if row is None:
         flash("Submission not found.", "error")
         return redirect(url_for("admin.course_approvals"))
+
     if not note:
         flash("A rejection note is required.", "error")
         return redirect(url_for("admin.course_approvals"))
 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    # Update the submission row
     with db.transaction() as conn:
         conn.execute(
-            "UPDATE course_submissions SET status='REJECTED', admin_note=?, decided_at=? WHERE id=?",
+            """
+            UPDATE course_submissions
+               SET status = 'REJECTED',
+                   admin_note = ?,
+                   decided_at = ?
+             WHERE id = ?
+            """,
             (note, now, submission_id),
         )
+
+    # If the underlying course was already published because of an
+    # earlier approval, roll it back to DRAFT so it hides from learners.
+    course_service = svc["course_service"]
+    course = course_service.get_course(row["course_code"])
+    if course and course.status == CourseStatus.PUBLISHED:
+        try:
+            course.status = CourseStatus.DRAFT
+            course_service.update_course(course)
+        except Exception as e:
+            flash(f"Submission rejected, but course rollback failed: {e}", "warning")
+
+    # Notify the instructor
     notif_repo = svc.get("notification_repo")
     if notif_repo:
         notif_repo.create(Notification(
             user_id=row["instructor_id"],
-            message=f"Your course '{row['course_code']}' submission was rejected. Admin feedback: {note}",
+            message=(
+                f"Your course '{row['course_code']}' submission was rejected. "
+                f"Admin feedback: {note}"
+            ),
         ))
+
     flash(f"Submission for '{row['course_code']}' rejected.", "success")
     return redirect(url_for("admin.course_approvals"))
-
-
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
 @admin_bp.route("/prerequisites")

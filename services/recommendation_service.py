@@ -49,7 +49,6 @@ class RecommendationService:
         self._graph           = graph
 
     # ── Recommendations ────────────────────────────────────────────────────────
-
     def get_recommendations(
         self,
         learner_id:            int,
@@ -58,19 +57,11 @@ class RecommendationService:
         goals:                 Optional[Set[str]] = None,
     ) -> List[Dict]:
         """
-        Generate ranked course recommendations for a learner.
+        Generate ranked recommendations, filtered strictly by difficulty.
 
-        Args:
-            learner_id            : Learner to recommend for.
-            difficulty_preference : "BEGINNER"/"INTERMEDIATE"/"ADVANCED"
-            limit                 : Maximum recommendations.
-            goals                 : Optional target courses to prioritize.
-
-        Returns:
-            list[dict]: Ranked recommendations with scores and reasons.
-
-        Raises:
-            LearnerNotFoundError: If learner not found.
+        If the engine returns no ready-to-take courses at the requested
+        difficulty, fall back to showing all courses of that difficulty
+        with their remaining prerequisites listed.
         """
         if self._learner_repo.get_learner(learner_id) is None:
             raise LearnerNotFoundError(
@@ -81,14 +72,56 @@ class RecommendationService:
         course_info = self._build_course_info()
         engine      = RecommendationEngine(self._graph)
 
+        normalized = (difficulty_preference or "").strip().upper()
+
+        # ── Step 1: ask engine for a large pool ──────────────────
         recs = engine.recommend(
             learner_credits       = credits,
             course_info           = course_info,
             difficulty_preference = difficulty_preference,
-            limit                 = limit,
+            limit                 = 100,   # get everything
             goals                 = goals,
         )
 
+        # ── Step 2: hard-filter by difficulty ────────────────────
+        if normalized in ("BEGINNER", "INTERMEDIATE", "ADVANCED"):
+            recs = [
+                r for r in recs
+                if course_info.get(r.course_code)
+                and course_info[r.course_code].difficulty.upper() == normalized
+            ]
+
+        # ── Step 3: fallback — show all courses of that level ────
+        if not recs and normalized in ("BEGINNER", "INTERMEDIATE", "ADVANCED"):
+            completed = credits.completed
+            fallback = []
+
+            for code, info in course_info.items():
+                if info.difficulty.upper() != normalized:
+                    continue
+                if code in completed:
+                    continue
+
+                # figure out remaining prerequisites
+                all_prereqs = self._graph.get_all_prerequisites(code)
+                remaining   = sorted(all_prereqs - completed)
+
+                fallback.append({
+                    "course_code": info.code,
+                    "course_name": info.name,
+                    "score":       0.0,
+                    "reasons":     (
+                        ["Available goal course"] if remaining
+                        else ["Ready to enroll"]
+                    ),
+                    "remaining":   remaining,
+                })
+
+            fallback.sort(key=lambda r: (len(r["remaining"]), r["course_code"]))
+            return fallback[:limit]
+
+        # ── Step 4: normal path ──────────────────────────────────
+        recs = recs[:limit]
         return [
             {
                 "course_code": r.course_code,
@@ -99,7 +132,6 @@ class RecommendationService:
             }
             for r in recs
         ]
-
     def get_learning_roadmap(
         self,
         learner_id:   int,

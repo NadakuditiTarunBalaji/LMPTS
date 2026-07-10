@@ -106,14 +106,50 @@ def users():
 
 @admin_bp.route("/users/create", methods=["POST"])
 def create_user():
+    """
+    Create a new user account.
+
+    If role is LEARNER, also creates a Learner profile so the user
+    can access the learner dashboard immediately.
+    """
+    svc = services()
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    role = UserRole[request.form.get("role", "LEARNER")]
+    role_str = request.form.get("role", "LEARNER")
+
+    # ── Validate role ─────────────────────────────────────────────────────────
     try:
-        services()["auth_service"].register(username, password, role)
-        flash(f"User '{username}' created.", "success")
+        role = UserRole[role_str]
+    except KeyError:
+        flash(f"Invalid role: {role_str}", "error")
+        return redirect(url_for("admin.users"))
+
+    try:
+        # ── Step 1: Create the user account (ACTIVE by default) ───────────────
+        new_user = svc["auth_service"].register(username, password, role)
+
+        # ── Step 2: If LEARNER, create the linked Learner profile ─────────────
+        # Without this, /learner/* returns 403 because
+        # current_learner_id() returns None.
+        if role == UserRole.LEARNER:
+            svc["learner_repo"].create_learner(Learner(
+                name=username,                    # placeholder — user can edit
+                email=f"{username}@lmpts.edu",    # placeholder — user can edit
+                user_id=new_user.id,
+            ))
+            flash(
+                f"Learner '{username}' created with account and profile.",
+                "success",
+            )
+        else:
+            flash(f"User '{username}' created as {role.value}.", "success")
+
     except ValidationError as e:
         flash(str(e), "error")
+    except Exception as e:
+        flash(f"Failed to create user: {e}", "error")
+
     return redirect(url_for("admin.users"))
 
 

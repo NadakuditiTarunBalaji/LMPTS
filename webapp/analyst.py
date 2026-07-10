@@ -17,13 +17,6 @@ def _guard():
 
 @analyst_bp.route("/")
 def dashboard():
-<<<<<<< HEAD
-    svc = services()["analytics_service"]
-    overview = svc.system_overview()
-    distribution = svc.difficulty_distribution()
-    most_enrolled = svc.most_enrolled_courses(limit=5)
-    return render_template("analyst/dashboard.html", overview=overview, distribution=distribution, most_enrolled=most_enrolled)
-=======
     svc = services()
     analytics = svc["analytics_service"]
 
@@ -67,7 +60,6 @@ def dashboard():
         enrollment_trend=enrollment_trend,
         instructor_report=instructor_report,
     )
->>>>>>> d8e71ef3f647a61b2f54c19b01cf8448ef9c2aac
 
 
 @analyst_bp.route("/courses")

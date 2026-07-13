@@ -1,40 +1,848 @@
 {% extends "base.html" %}
 {% block title %}Analytics Dashboard — LMPTS{% endblock %}
+
 {% block content %}
-<h1>Analytics Dashboard</h1>
 
+<!-- ── Page Header ──────────────────────────────────────────────────────── -->
+<div class="page-header">
+  <h1>Analytics Dashboard</h1>
+  <a href="{{ url_for('analyst.dashboard') }}" class="btn-refresh">Refresh</a>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 1. OVERVIEW STAT CARDS                                                -->
+<!-- Mirrors: Tkinter _build_overview_tab() stat cards                     -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="stat-cards">
-  <div class="stat-card"><div class="value">{{ overview.total_courses }}</div><div class="label">Courses</div></div>
-  <div class="stat-card"><div class="value">{{ overview.total_learners }}</div><div class="label">Learners</div></div>
-  <div class="stat-card"><div class="value">{{ overview.total_enrollments }}</div><div class="label">Enrollments</div></div>
-  <div class="stat-card"><div class="value">{{ overview.total_completions }}</div><div class="label">Completions</div></div>
-  <div class="stat-card"><div class="value">{{ "%.1f"|format(overview.overall_completion_rate) }}%</div><div class="label">Completion Rate</div></div>
+
+  <div class="stat-card" style="--accent:#1a3a5c">
+    <div class="stat-value">{{ overview.total_courses }}</div>
+    <div class="stat-label">Total Courses</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#27ae60">
+    <div class="stat-value">{{ overview.total_learners }}</div>
+    <div class="stat-label">Total Learners</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#e67e22">
+    <div class="stat-value">{{ overview.total_enrollments }}</div>
+    <div class="stat-label">Total Enrollments</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#8e44ad">
+    <div class="stat-value">{{ overview.total_completions }}</div>
+    <div class="stat-label">Completions</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#3498db">
+    <div class="stat-value">
+      {{ "%.1f" | format(overview.overall_completion_rate) }}%
+    </div>
+    <div class="stat-label">Completion Rate</div>
+  </div>
+
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 2. DIFFICULTY DISTRIBUTION                                            -->
+<!-- Mirrors: Tkinter _build_overview_tab() progress bars                  -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="panel">
-  <h2>Difficulty distribution</h2>
-  <table>
-    <tr><th>Beginner</th><th>Intermediate</th><th>Advanced</th><th>Total</th></tr>
-    <tr>
-      <td>{{ distribution.BEGINNER }}</td>
-      <td>{{ distribution.INTERMEDIATE }}</td>
-      <td>{{ distribution.ADVANCED }}</td>
-      <td>{{ distribution.total }}</td>
-    </tr>
-  </table>
+  <h2 class="section-title">Difficulty Distribution</h2>
+
+  {% set diff = overview.get("difficulty_distribution", {}) %}
+  {% set total_courses = [overview.total_courses, 1] | max %}
+
+  {% for level, colour in [
+      ("BEGINNER",     "#27ae60"),
+      ("INTERMEDIATE", "#e67e22"),
+      ("ADVANCED",     "#c0392b")
+  ] %}
+  {% set count = diff.get(level, 0) %}
+  {% set pct   = (count / total_courses * 100) | round(1) %}
+
+  <div class="diff-row">
+    <span class="diff-label" style="color:{{ colour }}">{{ level }}</span>
+    <div class="progress-track">
+      <div class="progress-fill"
+           style="width:{{ pct }}%; background:{{ colour }}">
+      </div>
+    </div>
+    <span class="diff-count">{{ count }}</span>
+  </div>
+  {% endfor %}
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 3. STUDENT PERFORMANCE                                                -->
+<!-- Mirrors: Tkinter _build_learner_tab() Treeview table                  -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<h2 class="section-title">Student Performance</h2>
+
 <div class="panel">
-  <h2>Most enrolled courses</h2>
-  {% if most_enrolled %}
-  <table>
-    <tr><th>Course</th><th>Difficulty</th><th>Enrollments</th></tr>
-    {% for c in most_enrolled %}
-    <tr><td>{{ c.course_code }} — {{ c.course_name }}</td><td>{{ c.difficulty }}</td><td>{{ c.enrollments }}</td></tr>
-    {% endfor %}
-  </table>
+  {% if performance_report %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Student Name</th>
+          <th>Course</th>
+          <th>Marks</th>
+          <th>Grade</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for r in performance_report %}
+        {% set score = r.get("score") %}
+        {% set status = r.get("status", "") %}
+
+        <tr>
+          <td>{{ r.get("student_name", "—") }}</td>
+
+          <td>
+            {{ r.get("course_code", "—") }}
+            {% if r.get("course_name") %}
+              — {{ r.get("course_name") }}
+            {% endif %}
+          </td>
+
+          <td>
+            {% if score is not none %}
+              {{ "%.1f"|format(score) }}
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+
+          <td>{{ r.get("grade", "N/A") }}</td>
+
+          <td>
+            {% if status == "COMPLETED" %}
+              <span class="badge ok">Completed</span>
+            {% elif status == "CANCELLED" %}
+              <span class="badge bad">Cancelled</span>
+            {% elif status == "IN_PROGRESS" %}
+              <span class="badge warn">In Progress</span>
+            {% else %}
+              <span class="badge neutral">
+                {{ status|replace("_", " ")|title if status else "—" }}
+              </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <p class="empty-state">No enrollment data yet.</p>
+    <p class="empty-state">No student performance data available.</p>
   {% endif %}
 </div>
+
+<!-- Performance Charts (row of 3) -->
+<div class="chart-grid">
+
+  <div class="panel">
+  <h2>Marks by Student</h2>
+    <div class="chart-container">
+      <canvas id="chartStudentMarks"></canvas>
+      <p class="empty-state" id="emptyStudentMarks" hidden>No Data Available</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Performance Distribution</h2>
+    <div class="chart-container">
+      <canvas id="chartScoreBuckets"></canvas>
+      <p class="empty-state" id="emptyScoreBuckets" hidden>No Data Available</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Performance Over Time</h2>
+    <div class="chart-container">
+      <canvas id="chartPerformanceTrend"></canvas>
+      <p class="empty-state" id="emptyPerformanceTrend" hidden>
+        No Data Available
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 4. COURSE COMPLETION ANALYTICS                                        -->
+<!-- Mirrors: Tkinter _build_course_tab() Treeview                        -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<h2 class="section-title">Course Completion Analytics</h2>
+
+<div class="stat-cards">
+
+  <div class="stat-card" style="--accent:#0ca30c">
+    <div class="stat-value">{{ completion_breakdown.completed }}</div>
+    <div class="stat-label">Completed</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#2a78d6">
+    <div class="stat-value">{{ completion_breakdown.in_progress }}</div>
+    <div class="stat-label">In Progress</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#898781">
+    <div class="stat-value">{{ completion_breakdown.not_started }}</div>
+    <div class="stat-label">Not Started</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#3498db">
+    <div class="stat-value">
+      {{ "%.1f" | format(completion_breakdown.completion_rate) }}%
+    </div>
+    <div class="stat-label">Completion %</div>
+  </div>
+
+</div>
+
+<div class="chart-grid">
+
+  <div class="panel">
+    <h2>Completion Breakdown</h2>
+    <div class="chart-container">
+      <canvas id="chartCompletionDoughnut"></canvas>
+      <p class="empty-state" id="emptyCompletionDoughnut" hidden>
+        No Data Available
+      </p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Completion by Course</h2>
+    <div class="chart-container">
+      <canvas id="chartCompletionStacked"></canvas>
+      <p class="empty-state" id="emptyCompletionStacked" hidden>
+        No Data Available
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 5. ENROLLMENT ANALYTICS                                               -->
+<!-- Mirrors: Tkinter _load_chart() bar chart for most enrolled           -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<h2 class="section-title">Enrollment Analytics</h2>
+
+<div class="stat-cards">
+
+  <div class="stat-card" style="--accent:#1a3a5c">
+    <div class="stat-value">
+      {{ enrollment_metrics.total_enrollments }}
+    </div>
+    <div class="stat-label">Total Enrollments</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#27ae60">
+    <div class="stat-value">{{ enrollment_metrics.new_this_week }}</div>
+    <div class="stat-label">New (This Week)</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#e67e22">
+    <div class="stat-value">
+      {{ enrollment_metrics.monthly_enrollments }}
+    </div>
+    <div class="stat-label">Monthly Enrollments</div>
+  </div>
+
+  <div class="stat-card" style="--accent:#3498db">
+    <div class="stat-value">
+      {{ "%.1f" | format(enrollment_metrics.growth_rate) }}%
+    </div>
+    <div class="stat-label">Growth %</div>
+  </div>
+
+</div>
+
+<div class="chart-grid">
+
+  <div class="panel">
+    <h2>Monthly Enrollments</h2>
+    <div class="chart-container">
+      <canvas id="chartEnrollmentMonthly"></canvas>
+      <p class="empty-state" id="emptyEnrollmentMonthly" hidden>
+        No Data Available
+      </p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Enrollment Trend</h2>
+    <div class="chart-container">
+      <canvas id="chartEnrollmentTrend"></canvas>
+      <p class="empty-state" id="emptyEnrollmentTrend" hidden>
+        No Data Available
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- 6. INSTRUCTOR ANALYTICS                                               -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<h2 class="section-title">Instructor Analytics</h2>
+
+<div class="panel">
+  {% if instructor_report %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Instructor</th>
+          <th>Courses Created</th>
+          <th>Students Assigned</th>
+          <th>Avg Rating</th>
+          <th>Completion Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in instructor_report %}
+        <tr>
+          <td>{{ r.instructor_name }}</td>
+          <td>{{ r.courses_created }}</td>
+          <td>{{ r.students_assigned }}</td>
+          <td>
+            <span class="badge neutral">{{ r.average_rating }}</span>
+          </td>
+          <td>{{ "%.1f" | format(r.completion_rate) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-state">No instructor data available.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Students Assigned per Instructor</h2>
+  <div class="chart-container tall">
+    <canvas id="chartInstructors"></canvas>
+    <p class="empty-state" id="emptyInstructors" hidden>No Data Available</p>
+  </div>
+</div>
+
+{% endblock %}
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- CHART.JS SCRIPTS                                                      -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  "use strict";
+
+  const DATA = {
+    performanceReport:
+      {{ performance_report | default([], true) | tojson }},
+    scoreBuckets:
+      {{ score_buckets | default({}, true) | tojson }},
+    performanceTrend:
+      {{ performance_trend | default([], true) | tojson }},
+    completionBreakdown:
+      {{ completion_breakdown | default({}, true) | tojson }},
+    completionByCourse:
+      {{ completion_by_course | default({}, true) | tojson }},
+    enrollmentTrend:
+      {{ enrollment_trend | default([], true) | tojson }},
+    instructors:
+      {{ instructor_report | default([], true) | tojson }}
+  };
+
+  const COLOR = {
+    blue: "#2a78d6",
+    aqua: "#1baf7a",
+    good: "#0ca30c",
+    warn: "#fab219",
+    critical: "#d03b3b",
+    neutral: "#898781",
+    grid: "#e1e0d9",
+    ink: "#52514e"
+  };
+
+  function showEmpty(canvasId, emptyId, message = "No Data Available") {
+    const canvas = document.getElementById(canvasId);
+    const empty = document.getElementById(emptyId);
+
+    if (canvas) {
+      canvas.style.display = "none";
+    }
+
+    if (empty) {
+      empty.textContent = message;
+      empty.hidden = false;
+    }
+  }
+
+  function makeChart(canvasId, emptyId, config) {
+    const canvas = document.getElementById(canvasId);
+
+    if (!canvas) {
+      console.error("Canvas not found:", canvasId);
+      return null;
+    }
+
+    try {
+      return new Chart(canvas, config);
+    } catch (error) {
+      console.error(`Could not render ${canvasId}:`, error);
+      showEmpty(canvasId, emptyId, "Chart could not be rendered");
+      return null;
+    }
+  }
+
+  const chartIds = [
+    ["chartStudentMarks", "emptyStudentMarks"],
+    ["chartScoreBuckets", "emptyScoreBuckets"],
+    ["chartPerformanceTrend", "emptyPerformanceTrend"],
+    ["chartCompletionDoughnut", "emptyCompletionDoughnut"],
+    ["chartCompletionStacked", "emptyCompletionStacked"],
+    ["chartEnrollmentMonthly", "emptyEnrollmentMonthly"],
+    ["chartEnrollmentTrend", "emptyEnrollmentTrend"],
+    ["chartInstructors", "emptyInstructors"]
+  ];
+
+  if (typeof Chart === "undefined") {
+    console.error("Chart.js was not loaded.");
+
+    chartIds.forEach(([canvasId, emptyId]) => {
+      showEmpty(canvasId, emptyId, "Chart.js could not be loaded");
+    });
+
+    return;
+  }
+
+  Chart.defaults.color = COLOR.ink;
+  Chart.defaults.borderColor = COLOR.grid;
+  Chart.defaults.font.family = "'Segoe UI', Arial, sans-serif";
+
+  // ------------------------------------------------------------
+  // 1. Marks by student
+  // ------------------------------------------------------------
+  const scored = DATA.performanceReport.filter(
+    (row) => row.score !== null && row.score !== undefined
+  );
+
+  if (!scored.length) {
+    showEmpty("chartStudentMarks", "emptyStudentMarks");
+  } else {
+    makeChart(
+      "chartStudentMarks",
+      "emptyStudentMarks",
+      {
+        type: "bar",
+        data: {
+          labels: scored.map(
+            (row) => `${row.student_name} (${row.course_code})`
+          ),
+          datasets: [{
+            label: "Marks",
+            data: scored.map((row) => Number(row.score)),
+            backgroundColor: COLOR.blue,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 2. Performance distribution
+  // Service thresholds:
+  // Excellent >= 90, Good >= 75, Average >= 50, Poor < 50
+  // ------------------------------------------------------------
+  const bucketTotal = Number(DATA.scoreBuckets.total || 0);
+
+  if (!bucketTotal) {
+    showEmpty("chartScoreBuckets", "emptyScoreBuckets");
+  } else {
+    makeChart(
+      "chartScoreBuckets",
+      "emptyScoreBuckets",
+      {
+        type: "pie",
+        data: {
+          labels: [
+            "Excellent ≥90",
+            "Good 75–89",
+            "Average 50–74",
+            "Poor <50"
+          ],
+          datasets: [{
+            data: [
+              Number(DATA.scoreBuckets.Excellent || 0),
+              Number(DATA.scoreBuckets.Good || 0),
+              Number(DATA.scoreBuckets.Average || 0),
+              Number(DATA.scoreBuckets.Poor || 0)
+            ],
+            backgroundColor: [
+              COLOR.good,
+              COLOR.blue,
+              COLOR.warn,
+              COLOR.critical
+            ],
+            borderColor: "#ffffff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom"
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 3. Performance over time
+  // ------------------------------------------------------------
+  const hasPerformanceTrend = DATA.performanceTrend.some(
+    (row) =>
+      row.average_score !== null &&
+      row.average_score !== undefined
+  );
+
+  if (!hasPerformanceTrend) {
+    showEmpty(
+      "chartPerformanceTrend",
+      "emptyPerformanceTrend"
+    );
+  } else {
+    makeChart(
+      "chartPerformanceTrend",
+      "emptyPerformanceTrend",
+      {
+        type: "line",
+        data: {
+          labels: DATA.performanceTrend.map((row) => row.label),
+          datasets: [{
+            label: "Average Score",
+            data: DATA.performanceTrend.map((row) =>
+              row.average_score === null
+                ? null
+                : Number(row.average_score)
+            ),
+            borderColor: COLOR.blue,
+            backgroundColor: COLOR.blue,
+            pointBackgroundColor: COLOR.blue,
+            pointRadius: 4,
+            tension: 0.3,
+            spanGaps: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 4. Completion breakdown
+  // ------------------------------------------------------------
+  const completion = DATA.completionBreakdown;
+  const completionTotal = Number(completion.total || 0);
+
+  if (!completionTotal) {
+    showEmpty(
+      "chartCompletionDoughnut",
+      "emptyCompletionDoughnut"
+    );
+  } else {
+    makeChart(
+      "chartCompletionDoughnut",
+      "emptyCompletionDoughnut",
+      {
+        type: "doughnut",
+        data: {
+          labels: [
+            "Completed",
+            "In Progress",
+            "Not Started"
+          ],
+          datasets: [{
+            data: [
+              Number(completion.completed || 0),
+              Number(completion.in_progress || 0),
+              Number(completion.not_started || 0)
+            ],
+            backgroundColor: [
+              COLOR.good,
+              COLOR.blue,
+              COLOR.neutral
+            ],
+            borderColor: "#ffffff",
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "60%",
+          plugins: {
+            legend: {
+              position: "bottom"
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 5. Completion by course
+  // ------------------------------------------------------------
+  const completionByCourse = DATA.completionByCourse;
+  const courseLabels = Array.isArray(completionByCourse.labels)
+    ? completionByCourse.labels
+    : [];
+
+  if (!courseLabels.length) {
+    showEmpty(
+      "chartCompletionStacked",
+      "emptyCompletionStacked"
+    );
+  } else {
+    makeChart(
+      "chartCompletionStacked",
+      "emptyCompletionStacked",
+      {
+        type: "bar",
+        data: {
+          labels: courseLabels,
+          datasets: [
+            {
+              label: "Completed",
+              data: completionByCourse.completed || [],
+              backgroundColor: COLOR.good
+            },
+            {
+              label: "In Progress",
+              data: completionByCourse.in_progress || [],
+              backgroundColor: COLOR.blue
+            },
+            {
+              label: "Not Started",
+              data: completionByCourse.not_started || [],
+              backgroundColor: COLOR.neutral
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "bottom"
+            }
+          },
+          scales: {
+            x: {
+              stacked: true
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 6. Monthly enrollments
+  // ------------------------------------------------------------
+  const enrollmentTotal = DATA.enrollmentTrend.reduce(
+    (total, row) => total + Number(row.count || 0),
+    0
+  );
+
+  if (!enrollmentTotal) {
+    showEmpty(
+      "chartEnrollmentMonthly",
+      "emptyEnrollmentMonthly"
+    );
+    showEmpty(
+      "chartEnrollmentTrend",
+      "emptyEnrollmentTrend"
+    );
+  } else {
+    const enrollmentLabels = DATA.enrollmentTrend.map(
+      (row) => row.label
+    );
+
+    const enrollmentCounts = DATA.enrollmentTrend.map(
+      (row) => Number(row.count || 0)
+    );
+
+    makeChart(
+      "chartEnrollmentMonthly",
+      "emptyEnrollmentMonthly",
+      {
+        type: "bar",
+        data: {
+          labels: enrollmentLabels,
+          datasets: [{
+            label: "Enrollments",
+            data: enrollmentCounts,
+            backgroundColor: COLOR.blue,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      }
+    );
+
+    makeChart(
+      "chartEnrollmentTrend",
+      "emptyEnrollmentTrend",
+      {
+        type: "line",
+        data: {
+          labels: enrollmentLabels,
+          datasets: [{
+            label: "Enrollments",
+            data: enrollmentCounts,
+            borderColor: COLOR.aqua,
+            backgroundColor: COLOR.aqua,
+            pointBackgroundColor: COLOR.aqua,
+            pointRadius: 4,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      }
+    );
+  }
+
+  // ------------------------------------------------------------
+  // 7. Instructor analytics
+  // ------------------------------------------------------------
+  if (!DATA.instructors.length) {
+    showEmpty("chartInstructors", "emptyInstructors");
+  } else {
+    makeChart(
+      "chartInstructors",
+      "emptyInstructors",
+      {
+        type: "bar",
+        data: {
+          labels: DATA.instructors.map(
+            (row) => row.instructor_name
+          ),
+          datasets: [{
+            label: "Students Assigned",
+            data: DATA.instructors.map(
+              (row) => Number(row.students_assigned || 0)
+            ),
+            backgroundColor: COLOR.blue,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        }
+      }
+    );
+  }
+});
+</script>
 {% endblock %}

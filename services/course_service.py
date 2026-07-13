@@ -154,65 +154,71 @@ class CourseService:
         """
         return self._repo.find_by_difficulty(difficulty)
 
-    def update_course(self, course: Course) -> None:
-        """
-        Update an existing course's fields.
+    # ── Submission sync helper ────────────────────────────────────────────────────
 
-        Args:
-            course: Course with updated fields (code unchanged).
-
-        Raises:
-            CourseNotFoundError: If course code does not exist. (Q10: write)
-            ValidationError: If validation fails.
+    def _sync_submissions(
+        self,
+        course_code: str,
+        course_status: CourseStatus,
+    ) -> None:
         """
-        if not self._repo.course_exists(course.code):
-            raise CourseNotFoundError(
-                f"Course '{course.code}' not found"
+        Keep course_submissions.status aligned with courses.status.
+
+        Mapping:
+            courses.PUBLISHED → course_submissions.APPROVED  (non-rejected rows)
+            courses.ARCHIVED  → course_submissions.ARCHIVED  (non-rejected rows)
+            courses.DRAFT     → course_submissions.PENDING   (non-rejected rows)
+
+        REJECTED submissions are never touched (rejection is a terminal state).
+        Failures are logged but never raised.
+        """
+        sub_status_map = {
+            CourseStatus.PUBLISHED: "APPROVED",
+            CourseStatus.ARCHIVED:  "ARCHIVED",
+            CourseStatus.DRAFT:     "PENDING",
+        }
+        new_sub_status = sub_status_map.get(course_status)
+        if new_sub_status is None:
+            return
+
+        db = getattr(self._repo, "_db", None) or getattr(self._repo, "db", None)
+        if db is None:
+            return
+
+        try:
+            with db.transaction() as conn:
+                conn.execute(
+                    """
+                    UPDATE course_submissions
+                    SET status = ?
+                    WHERE course_code = ?
+                    AND status != 'REJECTED'
+                    """,
+                    (new_sub_status, course_code),
+                )
+        except Exception as e:
+            # Never fail the core operation because of a sync error
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[_sync_submissions] {course_code} → {new_sub_status}: {e}"
             )
-        course.validate()
-        self._repo.update_course(course)
-        self._rebuild_graph()
 
-    def delete_course(self, code: str) -> None:
-        """
-        Delete a course and remove it from the graph.
 
-        Cascades: removes all prerequisites and enrollments
-        (handled by SQLite ON DELETE CASCADE).
-
-        Args:
-            code: Course code to delete.
-
-        Raises:
-            CourseNotFoundError: If code does not exist. (Q10: write)
-        """
-        if not self._repo.course_exists(code):
-            raise CourseNotFoundError(f"Course '{code}' not found")
-
-        self._repo.delete_course(code)
-        self._graph.remove_course(code)
-
-    # ── Status Transitions ─────────────────────────────────────────────────────
+    # ── Status Transitions (patched) ─────────────────────────────────────────────
 
     def publish_course(self, code: str) -> Course:
         """
         Transition a course from DRAFT → PUBLISHED.
-
-        Only DRAFT courses can be published.
-
-        Args:
-            code: Course code to publish.
-
-        Returns:
-            Course: Updated course object.
-
-        Raises:
-            CourseNotFoundError: If not found.
-            ValidationError: If not in DRAFT status.
+        Idempotent: already-published courses still trigger a submission sync.
         """
         course = self._repo.get_course(code)
         if course is None:
             raise CourseNotFoundError(f"Course '{code}' not found")
+
+        if course.status == CourseStatus.PUBLISHED:
+            # Already published — still sync submissions to be safe
+            self._sync_submissions(code, CourseStatus.PUBLISHED)
+            return course
 
         if course.status != CourseStatus.DRAFT:
             raise ValidationError(
@@ -222,27 +228,24 @@ class CourseService:
 
         course.status = CourseStatus.PUBLISHED
         self._repo.update_course(course)
+
+        self._sync_submissions(code, CourseStatus.PUBLISHED)
+        self._rebuild_graph()
         return course
+
 
     def archive_course(self, code: str) -> Course:
         """
         Transition a course from PUBLISHED → ARCHIVED.
-
-        Only PUBLISHED courses can be archived.
-
-        Args:
-            code: Course code to archive.
-
-        Returns:
-            Course: Updated course object.
-
-        Raises:
-            CourseNotFoundError: If not found.
-            ValidationError: If not in PUBLISHED status.
+        Idempotent.
         """
         course = self._repo.get_course(code)
         if course is None:
             raise CourseNotFoundError(f"Course '{code}' not found")
+
+        if course.status == CourseStatus.ARCHIVED:
+            self._sync_submissions(code, CourseStatus.ARCHIVED)
+            return course
 
         if course.status != CourseStatus.PUBLISHED:
             raise ValidationError(
@@ -252,8 +255,53 @@ class CourseService:
 
         course.status = CourseStatus.ARCHIVED
         self._repo.update_course(course)
+
+        self._sync_submissions(code, CourseStatus.ARCHIVED)
+        self._rebuild_graph()
         return course
 
+
+    def update_course(self, course: Course) -> None:
+        """
+        Update an existing course's fields.
+        Also syncs course_submissions if the status changed.
+        """
+        if not self._repo.course_exists(course.code):
+            raise CourseNotFoundError(
+                f"Course '{course.code}' not found"
+            )
+
+        course.validate()
+        self._repo.update_course(course)
+
+        self._sync_submissions(course.code, course.status)
+        self._rebuild_graph()
+
+
+    def delete_course(self, code: str) -> None:
+        """
+        Delete a course; ON DELETE CASCADE also removes matching submissions.
+        """
+        if not self._repo.course_exists(code):
+            raise CourseNotFoundError(f"Course '{code}' not found")
+
+        # Extra safety: delete submissions explicitly in case FK cascade isn't set
+        db = getattr(self._repo, "_db", None) or getattr(self._repo, "db", None)
+        if db is not None:
+            try:
+                with db.transaction() as conn:
+                    conn.execute(
+                        "DELETE FROM course_submissions WHERE course_code = ?",
+                        (code,),
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"[delete_course sync] {code}: {e}"
+                )
+
+        self._repo.delete_course(code)
+        self._rebuild_graph()
     # ── Prerequisite Management ────────────────────────────────────────────────
 
     def add_prerequisite(

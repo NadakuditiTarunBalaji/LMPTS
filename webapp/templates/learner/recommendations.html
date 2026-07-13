@@ -21,16 +21,37 @@
   {% for r in recommendations %}
   <div class="panel">
     <h2>{{ r.course_code }} — {{ r.course_name }}</h2>
-    <p style="color:var(--muted); font-size:0.88rem;">Score: {{ "%.1f"|format(r.score) }}</p>
-    {% if r.reasons %}<p style="font-size:0.88rem;">{{ r.reasons|join("; ") }}</p>{% endif %}
-    <form method="post" action="{{ url_for('learner.enroll') }}">
-      <input type="hidden" name="course_code" value="{{ r.course_code }}">
-      <button type="submit" class="btn small">Enroll now</button>
-    </form>
+
+    <p style="color:var(--muted); font-size:0.88rem;">
+      Score: {{ "%.1f"|format(r.score) }}
+    </p>
+
+    {% if r.reasons %}
+      <p style="font-size:0.88rem;">
+        {{ r.reasons|join("; ") }}
+      </p>
+    {% endif %}
+
+    {% if r.remaining %}
+      <p style="font-size:0.85rem; color:var(--warning);">
+        <strong>Prerequisites needed:</strong>
+        {{ r.remaining|join(", ") }}
+      </p>
+      <button class="btn small secondary" disabled>
+        Locked
+      </button>
+    {% else %}
+      <form method="post" action="{{ url_for('learner.enroll') }}">
+        <input type="hidden" name="course_code" value="{{ r.course_code }}">
+        <button type="submit" class="btn small">Enroll now</button>
+      </form>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
 {% else %}
-<p class="empty-state">No recommendations available right now.</p>
+  <p class="empty-state">
+    No {{ difficulty|title }} courses available.
+  </p>
 {% endif %}
 {% endblock %}
